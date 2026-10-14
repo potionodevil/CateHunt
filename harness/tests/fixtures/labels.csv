@@ -1,0 +1,3 @@
+fingerprint,label,notes
+aaaabbbbcccc0001,vulnerable,CWE-328 MD5 Passwort-Hash (Deny, darf nie close)
+aaaabbbbcccc0002,fixed,bcrypt argon2 Negativkontrolle (darf close)

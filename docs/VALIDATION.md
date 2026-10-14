@@ -158,8 +158,12 @@ Ziel: realistische KI-generierte Bugs statt nur synthetischer Benchmarks.
   jeder fälschlich geschlossene Deny-Fall = Korpus-FAILED.
 - Pflege: Korpus versioniert, neue KI-Bug-Patterns quartalsweise ergänzen.
 
-## 6. Pruefung: crates aus Coding-Agent (Stand 14.10.2026)
+## 6. Pruefung: crates aus Coding-Agent (Stand 2026-10-14, Nachtrag)
 
-Geprueft: Arbeitsverzeichnis `E:/CodeCate` — enthaelt KEINE crates
-(leer, nur `.`/`..`; kein `Cargo.toml`, kein `crates/`, kein `src/`).
-→ Kein Abgleich moeglich; alle unten genannten Gaps sind offen.
+Urspruenglich war `E:/CodeCate` zum Pruefzeitpunkt leer (Race mit
+parallelem Coding-Agent). Nachtrag nach Fertigstellung: Workspace enthaelt
+`cate-core` (Evidence E0-E4, Metriken, Health-Stub), `cate-cli` (scan JSON),
+`cate-sarif` (E1-Import), `cate-deps` (Lockfile-Parser + Stub) sowie neu
+`cate-triage` (Deny-List + Verdict-Fingerprint, s. Phase-2-Commit).
+Offen bleiben: OWASP-/SastBench-Anbindung (nur Harness-Stub),
+Sandbox-Implementierung, Korpus-Ausbau ueber 2 Faelle hinaus.

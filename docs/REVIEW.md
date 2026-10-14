@@ -1,7 +1,8 @@
 # CateHunt v2 — Review (Checker)
 
 Stand: 2026-10-14 | Prüfling: `E:/CodeCate` | Perspektive: kritisches Review-Modell (skeptisch)
-Ergebnis: **🔴 ROT — kein reviewfähiger Stand (Workspace leer)**
+Ergebnis (Nachtrag): **🟡 GELB — Phase 1 + Triage-Kern steht, Re-Review-Teile offen (s. §1).**
+Ursprüngliches Ergebnis zum Prüfzeitpunkt (Race, Workspace leer): 🔴 ROT.
 
 ## 1. Ampelstatus
 
@@ -10,7 +11,9 @@ Ergebnis: **🔴 ROT — kein reviewfähiger Stand (Workspace leer)**
 | Konsistenz Plan vs Code vs Validation | 🔴 | Kein Artefakt vorhanden: kein `docs/PLAN.md`, kein Crate, kein `docs/VALIDATION.md`. Nichts zu vergleichen. |
 | Masterplan-Vollständigkeit | 🔴 | Alle 4 Masterplan-Punkte unprüfbar / fehlend (s. §3). |
 | Security | 🟡 | Kein Code → keine aktive Lücke, aber auch kein Nachweis für Sandbox/Path-Traversal/Secrets-Handling. Strukturelles Risiko, kein akuter Befund. |
-| **Gesamt** | **🔴 ROT** | **Kein Merge, kein MVP-Sign-off. Re-Review nach Lieferung der Parallel-Artefakte Pflicht.** |
+| **Gesamt** | **🟡 GELB** | **M-1 erledigt (Artefakte vorhanden, Build grün). Offen: M-2…M-8 ohne Beleg — Sandbox, MCP-Tools, AI-BOM/Trend, Scope-Export, Secrets-Redaction. Kein MVP-Sign-off vor Belegen.** |
+
+Nachtrag 2026-10-14 (Phase-2-Commit): M-1 ✅ (PLAN.md, 5 Crates inkl. cate-triage, VALIDATION.md vorhanden, `cargo test` grün). M-3 teilweise (Verdict-Cache-Schema + Fingerprint implementiert, JSONL-Persistenz/CLI-Anbindung offen). M-7 teilweise (CLI jailt noch keine Pfade ausserhalb Root — `collect_source_files` folgt Symlinks, kein Canonicalize-Check). Rest offen.
 
 Re-Review-Trigger: sobald `docs/PLAN.md` + mind. 1 Crate + `docs/VALIDATION.md` existieren.
 
