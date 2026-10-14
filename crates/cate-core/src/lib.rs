@@ -3,6 +3,7 @@
 //! cate-core: Metriken (Verschachtelungstiefe, Funktionslaenge, Duplikat-Hashes),
 //! Evidence-Level E0-E4, Health-Score Stub.
 pub mod redact;
+pub mod scope;
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
@@ -250,19 +251,36 @@ fn guess_function_name(line: &str) -> Option<String> {
 
 // ---- Health-Score Stub (Masterplan: Struktur / Sicherheit-nur-E2+ / Abhaengigkeiten) ----
 
-/// Teilscores 0..100.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+/// Teilscores 0..100 plus E2+-Zaehllung aus Findings.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HealthScore {
     pub structure: u8,
     pub security: u8,
     pub dependencies: u8,
     pub total: u8,
+    /// Anzahl Findings mit Evidence >= E2.
+    pub total_e2_plus: usize,
+    /// E2+-Findings gruppiert nach Level (z.B. "error", "warning").
+    pub by_level: std::collections::BTreeMap<String, usize>,
 }
 
-/// Stub: Struktur aus Nesting/Laenge abgeleitet, Security default 100
-/// (nur E2+ Findings zaehlen — Phase 1: keine, also 100),
-/// Dependencies default 100 (kein Befund).
-pub fn health_score_stub(metrics: &[FileMetrics]) -> HealthScore {
+/// Ein Finding, reduziert auf das für den Health-Score Relevante.
+/// Caller (z.B. CLI) mappen ihre Finding-Typen hierher.
+#[derive(Debug, Clone)]
+pub struct ScoredFinding {
+    pub level: String,
+    pub evidence: EvidenceLevel,
+}
+
+/// Health-Score: Struktur aus Nesting/Laenge/Duplikaten, Security aus
+/// E2+-Findings (E0/E1 zaehlen nicht), Dependencies aus der Anzahl
+/// verdaechtiger Abhaengigkeiten (Caller zaehlt, z.B. Registry-Checks).
+/// Level-Penalty: error=15, warning=8, note=3, sonst 8. Deps: 10 pro Treffer.
+pub fn health_score(
+    metrics: &[FileMetrics],
+    findings: &[ScoredFinding],
+    suspicious_deps: usize,
+) -> HealthScore {
     let mut penalty: u32 = 0;
     for m in metrics {
         if m.max_nesting_depth > 4 {
@@ -276,15 +294,38 @@ pub fn health_score_stub(metrics: &[FileMetrics]) -> HealthScore {
         penalty += (m.duplicate_hashes.len() as u32).min(10);
     }
     let structure = 100u8.saturating_sub(penalty.min(100) as u8);
-    let security = 100;
-    let dependencies = 100;
+
+    let mut by_level: std::collections::BTreeMap<String, usize> = std::collections::BTreeMap::new();
+    let mut sec_penalty: u32 = 0;
+    for f in findings {
+        if f.evidence < EvidenceLevel::E2 {
+            continue;
+        }
+        *by_level.entry(f.level.clone()).or_insert(0) += 1;
+        sec_penalty += match f.level.as_str() {
+            "error" => 15,
+            "warning" => 8,
+            "note" => 3,
+            _ => 8,
+        };
+    }
+    let total_e2_plus: usize = by_level.values().sum();
+    let security = 100u8.saturating_sub(sec_penalty.min(100) as u8);
+    let dependencies = 100u8.saturating_sub(((suspicious_deps as u32) * 10).min(100) as u8);
     let total = ((structure as u32 + security as u32 + dependencies as u32) / 3) as u8;
     HealthScore {
         structure,
         security,
         dependencies,
         total,
+        total_e2_plus,
+        by_level,
     }
+}
+
+/// Stub-Kompatibilitaet: ohne Findings/Deps (Security/Deps = 100).
+pub fn health_score_stub(metrics: &[FileMetrics]) -> HealthScore {
+    health_score(metrics, &[], 0)
 }
 
 #[cfg(test)]
@@ -308,5 +349,51 @@ mod tests {
         let e = EvidenceLevel::E2;
         let s = serde_json::to_string(&e).unwrap();
         assert_eq!(s, "\"E2\"");
+    }
+
+    #[test]
+    fn e1_finding_does_not_lower_security() {
+        let f = vec![ScoredFinding {
+            level: "error".into(),
+            evidence: EvidenceLevel::E1,
+        }];
+        let h = health_score(&[], &f, 0);
+        assert_eq!(h.security, 100);
+        assert_eq!(h.total_e2_plus, 0);
+    }
+
+    #[test]
+    fn e2_error_lowers_security_and_counts_by_level() {
+        let f = vec![
+            ScoredFinding {
+                level: "error".into(),
+                evidence: EvidenceLevel::E2,
+            },
+            ScoredFinding {
+                level: "warning".into(),
+                evidence: EvidenceLevel::E3,
+            },
+        ];
+        let h = health_score(&[], &f, 0);
+        assert_eq!(h.total_e2_plus, 2);
+        assert_eq!(h.by_level.get("error"), Some(&1));
+        assert_eq!(h.by_level.get("warning"), Some(&1));
+        assert!(h.security < 100, "security muss sinken: {h:?}");
+    }
+
+    #[test]
+    fn suspicious_deps_lower_dependencies() {
+        let h = health_score(&[], &[], 2);
+        assert_eq!(h.dependencies, 80);
+        let clean = health_score(&[], &[], 0);
+        assert_eq!(clean.dependencies, 100);
+    }
+
+    #[test]
+    fn stub_without_findings_stays_100() {
+        let h = health_score_stub(&[]);
+        assert_eq!(h.security, 100);
+        assert_eq!(h.dependencies, 100);
+        assert_eq!(h.total_e2_plus, 0);
     }
 }

@@ -1,7 +1,7 @@
 // Copyright (c) 2026 R.S. - Geistiges Eigentum von R.S. Kopieren, Vervielfaeltigung
 // oder Veraenderung ohne ausdrueckliche Genehmigung nicht erlaubt.
 //! cate CLI: `scan --path <dir> --format json`
-use cate_core::{analyze_file, health_score_stub, FileMetrics};
+use cate_core::{analyze_file, health_score, health_score_stub, FileMetrics};
 use std::path::{Path, PathBuf};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -26,7 +26,7 @@ fn print_help() {
     println!("cate {VERSION} — CateHunt v2 Phase 1");
     println!();
     println!("USAGE:");
-    println!("    cate scan --path <dir> [--format json] [--sarif <file>]");
+    println!("    cate scan --path <dir> [--format json] [--sarif <file>] [--base <rev>]");
     println!("    cate triage --cache <file> --fingerprint <fp> [--rule-id <id> --cwe <cwe> --action <open|demote|close> --code-hash <h>]");
     println!("    cate --version | --help");
 }
@@ -37,6 +37,7 @@ struct ScanOpts {
     #[allow(dead_code)]
     format: String,
     sarif: Option<PathBuf>,
+    base: Option<String>,
 }
 
 fn cmd_scan(raw: &[String]) {
@@ -60,6 +61,7 @@ fn parse_scan_args(raw: &[String]) -> Result<ScanOpts, String> {
     let mut path: Option<PathBuf> = None;
     let mut format = "json".to_string();
     let mut sarif: Option<PathBuf> = None;
+    let mut base: Option<String> = None;
     let mut i = 0;
     while i < raw.len() {
         match raw[i].as_str() {
@@ -78,6 +80,10 @@ fn parse_scan_args(raw: &[String]) -> Result<ScanOpts, String> {
                 i += 1;
                 sarif = Some(raw.get(i).ok_or("--sarif needs a value")?.into());
             }
+            "--base" => {
+                i += 1;
+                base = Some(raw.get(i).ok_or("--base needs a value")?.clone());
+            }
             other => return Err(format!("unknown flag: {other}")),
         }
         i += 1;
@@ -86,6 +92,7 @@ fn parse_scan_args(raw: &[String]) -> Result<ScanOpts, String> {
         path: path.ok_or("missing --path <dir>")?,
         format,
         sarif,
+        base,
     })
 }
 
@@ -141,7 +148,34 @@ fn run_scan(opts: &ScanOpts) -> Result<String, String> {
         None
     };
 
-    let health = health_score_stub(&metrics);
+    let health = if sarif_findings.is_some() || !registry_checks.is_empty() {
+        let scored: Vec<cate_core::ScoredFinding> = sarif_findings
+            .as_deref()
+            .unwrap_or(&[])
+            .iter()
+            .map(|f| cate_core::ScoredFinding {
+                level: f.level.clone(),
+                evidence: f.evidence,
+            })
+            .collect();
+        let suspicious = registry_checks
+            .iter()
+            .filter(|c| c.slopsquat_suspicious)
+            .count();
+        health_score(&metrics, &scored, suspicious)
+    } else {
+        health_score_stub(&metrics)
+    };
+    // Scope/Inventar Stufe 0: Lockfiles im Root + optional geaenderte
+    // Dateien seit --base (git diff --name-status).
+    let inventory = cate_core::scope::inventory(&root);
+    let scope_changed = match &opts.base {
+        Some(base) => match cate_core::scope::changed_files_since(&root, base) {
+            Ok(files) => serde_json::json!({ "base": base, "changed": files }),
+            Err(e) => serde_json::json!({ "base": base, "error": e }),
+        },
+        None => serde_json::Value::Null,
+    };
     let report = serde_json::json!({
         "tool": "cate",
         "version": VERSION,
@@ -152,6 +186,8 @@ fn run_scan(opts: &ScanOpts) -> Result<String, String> {
         "registry_checks": registry_checks,
         "sarif_findings": sarif_findings,
         "health": health,
+        "inventory": inventory,
+        "scope": scope_changed,
     });
     serde_json::to_string_pretty(&report).map_err(|e| format!("json: {e}"))
 }
@@ -447,6 +483,7 @@ mod tests {
             path: root.clone(),
             format: "json".into(),
             sarif: Some(sarif_path),
+            base: None,
         };
         let json = run_scan(&opts).unwrap();
         assert!(!json.contains("sk-abcDEF"), "Secret im Report: {json}");

@@ -149,18 +149,89 @@ pub fn parse_package_lock(json: &str) -> Result<Vec<Dependency>, String> {
 /// oder Version "0.0.0" gilt als verdaechtig. Echte Pruefung
 /// (Existenz/Alter/Downloads via crates.io-/npm-API) folgt in Phase 2.
 pub fn registry_check_stub(dep: &Dependency) -> RegistryCheck {
-    let suspicious = dep.version == "0.0.0"
+    registry_check_offline(dep, None)
+}
+
+/// Offline-Eintrag der Registry-Datenbank (naechste Stufe, kein Netz):
+/// Existenz, Alter in Tagen und Downloadzahl aus einer lokalen DB
+/// (z.B. eingecheckter Snapshot). Ohne DB gilt altes Stub-Verhalten.
+#[derive(Debug, Clone)]
+pub struct OfflineEntry {
+    pub exists: bool,
+    pub age_days: Option<u64>,
+    pub downloads: Option<u64>,
+}
+
+/// Offline-Registry-Datenbank: (name, registry) -> Eintrag.
+/// Befuellung aus Snapshot-Datei/Seed; kein Netzwerkzugriff.
+#[derive(Debug, Clone, Default)]
+pub struct OfflineDb {
+    entries: std::collections::HashMap<(String, String), OfflineEntry>,
+}
+
+impl OfflineDb {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn insert(&mut self, name: &str, registry: &str, entry: OfflineEntry) {
+        self.entries
+            .insert((name.to_string(), registry.to_string()), entry);
+    }
+
+    pub fn get(&self, name: &str, registry: &str) -> Option<&OfflineEntry> {
+        self.entries.get(&(name.to_string(), registry.to_string()))
+    }
+
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+}
+
+/// Registry-Check gegen Offline-DB (kein Netz):
+/// - Treffer: exists/age_days/downloads aus der DB; verdaechtig nur bei
+///   heuristischem Typosquat-Muster oder fehlender Existenz.
+/// - Fehltritt (mit DB): exists=false, keine Alter/Downloads, verdaechtig.
+/// - Ohne DB (None): altes Stub-Verhalten (exists=true, keine Felder).
+pub fn registry_check_offline(dep: &Dependency, db: Option<&OfflineDb>) -> RegistryCheck {
+    let heuristic = dep.version == "0.0.0"
         || dep.name.contains("--")
         || dep.name.len() == 1
         || looks_like_typosquat(&dep.name);
-    RegistryCheck {
-        name: dep.name.clone(),
-        version: dep.version.clone(),
-        exists: true, // Stub: keine Netzpruefung
-        age_days: None,
-        downloads: None,
-        slopsquat_suspicious: suspicious,
-        evidence: EvidenceLevel::E0,
+    match db {
+        None => RegistryCheck {
+            name: dep.name.clone(),
+            version: dep.version.clone(),
+            exists: true, // Stub: keine Netzpruefung
+            age_days: None,
+            downloads: None,
+            slopsquat_suspicious: heuristic,
+            evidence: EvidenceLevel::E0,
+        },
+        Some(db) => match db.get(&dep.name, &dep.registry) {
+            Some(e) => RegistryCheck {
+                name: dep.name.clone(),
+                version: dep.version.clone(),
+                exists: e.exists,
+                age_days: e.age_days,
+                downloads: e.downloads,
+                slopsquat_suspicious: heuristic || !e.exists,
+                evidence: EvidenceLevel::E0,
+            },
+            None => RegistryCheck {
+                name: dep.name.clone(),
+                version: dep.version.clone(),
+                exists: false,
+                age_days: None,
+                downloads: None,
+                slopsquat_suspicious: true, // unbekannt = verdaechtig
+                evidence: EvidenceLevel::E0,
+            },
+        },
     }
 }
 
@@ -225,5 +296,59 @@ mod tests {
             evidence: EvidenceLevel::E0,
         };
         assert!(registry_check_stub(&dep).slopsquat_suspicious);
+    }
+
+    #[test]
+    fn offline_db_hit_fills_fields() {
+        let dep = Dependency {
+            name: "serde".to_string(),
+            version: "1.0.0".to_string(),
+            registry: "crates.io".to_string(),
+            evidence: EvidenceLevel::E0,
+        };
+        let mut db = OfflineDb::new();
+        db.insert(
+            "serde",
+            "crates.io",
+            OfflineEntry {
+                exists: true,
+                age_days: Some(900),
+                downloads: Some(50_000_000),
+            },
+        );
+        let c = registry_check_offline(&dep, Some(&db));
+        assert!(c.exists);
+        assert_eq!(c.age_days, Some(900));
+        assert_eq!(c.downloads, Some(50_000_000));
+        assert!(!c.slopsquat_suspicious);
+    }
+
+    #[test]
+    fn offline_db_miss_means_not_exists_and_suspicious() {
+        let dep = Dependency {
+            name: "völlig-unbekannt-xyz".to_string(),
+            version: "0.0.1".to_string(),
+            registry: "crates.io".to_string(),
+            evidence: EvidenceLevel::E0,
+        };
+        let db = OfflineDb::new();
+        let c = registry_check_offline(&dep, Some(&db));
+        assert!(!c.exists);
+        assert_eq!(c.age_days, None);
+        assert_eq!(c.downloads, None);
+        assert!(c.slopsquat_suspicious);
+    }
+
+    #[test]
+    fn stub_without_db_keeps_old_behavior() {
+        let dep = Dependency {
+            name: "serde".to_string(),
+            version: "1.0.0".to_string(),
+            registry: "crates.io".to_string(),
+            evidence: EvidenceLevel::E0,
+        };
+        let c = registry_check_stub(&dep);
+        assert!(c.exists);
+        assert!(!c.slopsquat_suspicious);
     }
 }

@@ -6,6 +6,7 @@
 //! duerfen per KI nie geschlossen, nur herabgestuft werden.
 //! `apply_policy` erzwingt das: ein `close`-Verdict auf einer Deny-CWE
 //! wird zu `demote` + `policy_override: true`.
+pub mod ollama;
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;

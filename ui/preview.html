@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<!-- Copyright (c) 2026 R.S. - Geistiges Eigentum von R.S. Kopieren, Vervielfaeltigung oder Veraenderung ohne ausdrueckliche Genehmigung nicht erlaubt. -->
+<!-- CateHunt Phase 3 Minimal: statische Review-Vorschau (Tauri-Spec s. docs/TAURI_SPEC.md). -->
+<!-- Oeffnen: ui/preview.html im Browser. Laedt fixtures/findings.json + fixtures/health.json. -->
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CateHunt — Review-Workbench (Vorschau)</title>
+<style>
+  :root { color-scheme: light; }
+  body { font-family: system-ui, sans-serif; margin: 0; background: #f6f6f4; color: #1c1c1c; }
+  header { background: #161616; color: #fff; padding: 12px 20px; display: flex; gap: 16px; align-items: baseline; }
+  header h1 { font-size: 18px; margin: 0; }
+  #health { font-size: 14px; }
+  #health b { font-size: 20px; }
+  main { max-width: 900px; margin: 0 auto; padding: 16px; }
+  .finding { border: 1px solid #ddd; border-left-width: 6px; border-radius: 8px; background: #fff; margin: 10px 0; padding: 10px 14px; }
+  .finding.E3 { border-left-color: #d21f1f; }
+  .finding.E2 { border-left-color: #e67e00; }
+  .finding.E1 { border-left-color: #d9b400; }
+  .finding.E4 { border-left-color: #1e9e44; }
+  .finding.E0 { border-left-color: #999; }
+  .finding.E0 .details { display: none; }
+  .finding.E0.open .details { display: block; }
+  .badge { display: inline-block; font-weight: 700; font-size: 12px; border-radius: 4px; padding: 1px 8px; color: #fff; }
+  .E3 .badge { background: #d21f1f; }
+  .E2 .badge { background: #e67e00; }
+  .E1 .badge { background: #a88d00; }
+  .E4 .badge { background: #1e9e44; }
+  .E0 .badge { background: #999; }
+  .meta { font-size: 13px; color: #444; }
+  .actions { margin-top: 8px; display: flex; gap: 8px; align-items: center; }
+  button { padding: 5px 12px; border-radius: 6px; border: 1px solid #bbb; cursor: pointer; background: #fff; min-height: 44px; min-width: 44px; }
+  button:hover:not(:disabled) { background: #eef1f4; border-color: #888; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  button:focus-visible { outline: 3px solid #1a73e8; outline-offset: 2px; }
+  .finding.E0 > button[data-act="toggle"] { margin-top: 6px; }
+  #empty { display: none; padding: 24px; text-align: center; color: #555; border: 1px dashed #bbb; border-radius: 8px; background: #fff; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+  .deny-note { font-size: 12px; color: #a00; }
+  .filters { display: flex; gap: 8px; margin: 12px 0; font-size: 14px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>CateHunt — Review (Phase-3-Vorschau)</h1>
+  <div id="health" aria-live="polite">Health: …</div>
+</header>
+<main>
+  <div class="filters">
+    <label>Level <select id="f-level"><option value="">alle</option><option>E3</option><option>E2</option><option>E1</option><option>E4</option><option>E0</option></select></label>
+    <label>Kategorie <select id="f-cat"><option value="">alle</option><option>crypto</option><option>auth</option><option>deserialization</option><option>injection</option><option>other</option></select></label>
+    <span id="count"></span>
+  </div>
+  <div id="list"></div>
+  <div id="empty" role="status">Keine Befunde für diesen Filter — Filter zurücksetzen.</div>
+</main>
+<script>
+const ORDER = { E3: 0, E2: 1, E1: 2, E4: 3, E0: 4 }; // E3 rot oben, E4 gruen, E0 grau eingeklappt
+let findings = [], health = null;
+async function load() {
+  const [f, h] = await Promise.all([
+    fetch('fixtures/findings.json').then(r => r.json()),
+    fetch('fixtures/health.json').then(r => r.json())
+  ]);
+  findings = f; health = h;
+  // Health-Anzeige aus health.json (nur E2+ als Bugs).
+  document.getElementById('health').innerHTML =
+    'Health: <b>' + h.score_0_100 + '</b>/100 · E2+-Bugs: <b>' + h.total_e2_plus + '</b>';
+  render();
+}
+function render() {
+  const lv = document.getElementById('f-level').value;
+  const cat = document.getElementById('f-cat').value;
+  const items = findings
+    .filter(x => (!lv || x.evidence === lv) && (!cat || x.category === cat))
+    .sort((a, b) => (ORDER[a.evidence] - ORDER[b.evidence]) || a.id.localeCompare(b.id));
+  document.getElementById('count').textContent = items.length + ' von ' + findings.length + ' Befunden';
+  document.getElementById('empty').style.display = items.length ? 'none' : 'block';
+  const list = document.getElementById('list');
+  list.innerHTML = '';
+  for (const x of items) {
+    const el = document.createElement('article');
+    el.className = 'finding ' + x.evidence;
+    el.dataset.id = x.id;
+    const deny = !!x.deny;
+    el.innerHTML =
+      '<div><span class="badge">' + x.evidence + '</span> <b>' + x.id + '</b> · ' + esc(x.rule_id) + ' · ' + esc(x.cwe) + '</div>' +
+      '<div class="meta">' + esc(x.file) + ':' + (x.start_line || '?') + ' · ' + esc(x.category) + (deny ? ' · Deny-List' : '') + '</div>' +
+      '<div class="details"><p>' + esc(x.message) + '</p>' +
+      '<div class="actions">' +
+        '<button data-act="confirm">Bestätigen</button>' +
+        '<button data-act="escalate">Eskalieren</button>' +
+        '<button data-act="suppress"' + (deny ? ' disabled title="Deny-List: Suppress blockiert (Krypto/Auth/Deserialisierung)"' : '') + '>Suppress</button>' +
+        (deny ? '<span class="deny-note">Suppress blockiert: Deny-List (' + esc(x.cwe) + ') — nur Eskalieren.</span>' : '') +
+      '</div></div>' +
+      (x.evidence === 'E0' ? '<button data-act="toggle">Ein-/Ausklappen (E0 grau)</button>' : '');
+    list.appendChild(el);
+  }
+}
+function esc(s) { return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+document.getElementById('f-level').addEventListener('change', render);
+document.getElementById('f-cat').addEventListener('change', render);
+document.getElementById('list').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  const card = e.target.closest('.finding'); if (!card) return;
+  if (b.dataset.act === 'toggle') card.classList.toggle('open');
+  else if (!b.disabled) b.textContent += ' ✓';
+});
+load().catch(err => { document.getElementById('list').textContent = 'Fehler: ' + err; });
+</script>
+</body>
+</html>

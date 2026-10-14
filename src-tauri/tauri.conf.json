@@ -1,0 +1,16 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "CateHunt Review",
+  "version": "0.1.0",
+  "identifier": "de.catehunt.review",
+  "build": {
+    "frontendDist": "../ui",
+    "devUrl": "http://localhost:1420",
+    "beforeDevCommand": "",
+    "beforeBuildCommand": ""
+  },
+  "app": {
+    "windows": [{ "title": "CateHunt Review", "width": 1100, "height": 750 }],
+    "security": { "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'" }
+  }
+}
