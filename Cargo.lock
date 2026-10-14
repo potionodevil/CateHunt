@@ -9,6 +9,7 @@ dependencies = [
  "cate-core",
  "cate-deps",
  "cate-sarif",
+ "cate-triage",
  "serde",
  "serde_json",
 ]

@@ -1,10 +1,10 @@
 # CateHunt v2 — Plan (MVP Phasen 1–3)
 
 > Evidence Gate für KI-generierten Code. Lokales Desktop-Tool, local-first.
-> Sprache: Deutsch. Stand: 2026-10-14. Arbeitsverzeichnis: `E:/CodeCate` (git, Commits `ac8c2a1`, `9cfd276`).
+> Sprache: Deutsch. Stand: 2026-10-14. Arbeitsverzeichnis: `E:/CodeCate` (git, Commits bis `a542efa`).
 > REVIEW.md-Nachtrag: 🟡 GELB — M-1 ✅, M-3/M-7 teilweise, M-2/M-4/M-5/M-6/M-8 offen.
 
-## 0. Ist-Stand vs. Plan (Code-Abgleich 2026-10-14, `cargo test`: 16/16 grün inkl. paralleler Triage-Erweiterung)
+## 0. Ist-Stand vs. Plan (Code-Abgleich 2026-10-14, Commits bis `a542efa`, `cargo test`: 16/16 grün — 3 core + 2 deps + 1 sarif + 10 triage)
 
 ### Implementiert (mit Dateipfad)
 
@@ -20,10 +20,12 @@
 | Lockfile-Parser (Cargo.lock, package-lock v1+v2/v3) | `crates/cate-deps/src/lib.rs` | ✅ |
 | Typosquat-Heuristik (Stub, 1-Zeichen-Distanz) | `crates/cate-deps/src/lib.rs` (`looks_like_typosquat`) | ✅ Stub |
 | Deny-List (`verdict_cap`, 17 CWEs) + `apply_policy` (close→demote) | `crates/cate-triage/src/lib.rs` | ✅ |
+| CWE-Normalisierung (`CWE328`, `CWE 328`, Case/Whitespace) + Negativ-Test über alle 17 Deny-CWEs | `crates/cate-triage/src/lib.rs` (`normalize_cwe`, Test `deny_list_blocks_close_on_all_deny_cwes`) | ✅ (Loop `b10f520`→`a542efa`) |
+| Path-Jail Teil 1 (Root kanonisieren, Dir-Pflicht, Symlink-Escape-Skip mit Warnung, Visited-Set gegen Loops) | `crates/cate-cli/src/main.rs` (`run_scan`, `collect_source_files`) | ✅ Teil (REVIEW B-1/B-2 behoben; Redaction fehlt weiter) |
 | Fingerprint (64-bit) + normalize_code + code_hash | `crates/cate-triage/src/lib.rs` | ✅ (sha256-Upgrade offen) |
 | Benchmark-Harness (Suppression-Rate, HARD GATE >1% = FAILED) | `harness/harness.py` | ✅ Stub (JSONL+CSV) |
-| Korpus-Seed (CWE-328, CWE-798, je vuln+fixed) | `corpus/{cwe-328,cwe-798}/`, `corpus/manifest.json` | ✅ Seed (2 Fälle) |
-| Harness-Fixtures (labels.csv, verdicts_demo.jsonl) | `harness/tests/fixtures/` | ✅ Demo |
+| Korpus-Seed (CWE-328, CWE-798, je vuln+fixed) + Erweiterung CWE-89 (non-deny), CWE-502 (deny) | `corpus/{cwe-328,cwe-798,cwe-89,cwe-502}/`, `corpus/manifest.json` (v1, 4 Fälle) | ✅ Seed (4 Fälle) |
+| Harness-Fixtures (labels.csv, verdicts_demo.jsonl) + Fail-Fixture für Gate-Negativtest | `harness/tests/fixtures/` (`labels_fail.csv`, `verdicts_fail.jsonl`) | ✅ Demo + Fail |
 | VALIDATION.md (Deny-Regeln, Kennzahlen, CI-Gate-Spec) | `docs/VALIDATION.md` | ✅ Spec |
 
 ### Stub / Offen
@@ -36,7 +38,7 @@
 | Verdict-Cache-Persistenz | `crates/cate-triage` | Nur Fingerprint-Funktion, keine JSONL-Datei, kein Hit-Logging |
 | Triage-CLI-Anbindung | `crates/cate-cli` | Kein Triage-Subcommand, kein Ollama-Client |
 | Scope/Inventar (git diff) | — | Kein Scope-Crate, kein audit-Befehl |
-| Path-Jail | `collect_source_files` | Folgt Symlinks, kein Canonicalize-Check (REVIEW M-7) |
+| Path-Jail | `collect_source_files` | Teil 1 ✅ (kanonischer Root, Symlink-Escape-Skip, Loop-Schutz, Dir-Pflicht); offen: Redaction-Schicht, Fuzz-Test (REVIEW B-3, → Paket B) |
 | Secrets-Redaction | — | Keine Redaction vor Logs/Prompts (REVIEW M-8) |
 | Harness-Korpus-Anbindung | `harness/harness.py` | Kein Korpus-Lauf, kein CI-Skript |
 | MCP-Tools verify_fix/check_dependencies | — | Nur Zielbild-Signaturen in §3, keine Spec |
@@ -51,16 +53,16 @@ E:/CodeCate/
 ├── docs/{PLAN.md, REVIEW.md, VALIDATION.md}
 ├── crates/
 │   ├── cate-core/src/lib.rs    # Evidence, Metrik-Heuristiken, HealthScore-Stub
-│   ├── cate-cli/src/main.rs    # scan-Befehl, JSON-Report
+│   ├── cate-cli/src/main.rs    # scan-Befehl, JSON-Report, Path-Jail Teil 1 (Root-Canonicalize, Symlink-Skip, Loop-Schutz)
 │   ├── cate-sarif/src/lib.rs   # SARIF-Import → E1
 │   ├── cate-deps/src/lib.rs    # Lockfile-Parser, Registry-Stub
-│   └── cate-triage/src/lib.rs  # Deny-List, Policy, Fingerprint (KEIN Cache, KEIN CLI)
+│   └── cate-triage/src/lib.rs  # Deny-List, Policy, Fingerprint, CWE-Normalisierung (KEIN Cache, KEIN CLI)
 ├── harness/
 │   ├── harness.py              # Stub: JSONL-Verdicts vs CSV-Labels
-│   └── tests/fixtures/{labels.csv, verdicts_demo.jsonl}
+│   └── tests/fixtures/{labels.csv, verdicts_demo.jsonl, labels_fail.csv, verdicts_fail.jsonl}
 ├── corpus/
-│   ├── manifest.json           # 2 Fälle (cwe-328-01, cwe-798-01)
-│   └── cwe-{328,798}/{01_vuln.py, 01_fixed.py}
+│   ├── manifest.json           # v1, 4 Fälle (cwe-328-01 deny, cwe-798-01 deny, cwe-89-01 non-deny, cwe-502-01 deny)
+│   └── cwe-{328,798,89,502}/{01_vuln.py, 01_fixed.py}
 └── target/                     # Build-Artefakte (git-ignoriert)
 ```
 
@@ -227,7 +229,7 @@ Regeln: nur E2+ zählt als Bug (`total_e2_plus`). E0 grau eingeklappt, E3 rot ob
 ### Meilensteine
 - [ ] M2.1 Ollama/Qwen-Client read-only (nur Prompt mit Finding-Kontext, kein Code-Write, kein Netz außer localhost + opt-in Gemini)
 - [ ] M2.2 Verdict-Cache mit JSONL-Persistenz + Hit-Rate-Logging (Schema ✅ in VALIDATION.md 3.1, Fingerprint ✅, Persistenz offen → Paket A)
-- [x] M2.3 Deny-List: `crypto`, `auth`, `deserialization` → nie auto-suppress (`crates/cate-triage/src/lib.rs`, 9 Tests)
+- [x] M2.3 Deny-List: `crypto`, `auth`, `deserialization` → nie auto-suppress (`crates/cate-triage/src/lib.rs`, 10 Tests inkl. Negativ-Test über alle 17 Deny-CWEs)
 - [ ] M2.4 Benchmark-Harness: Harness-Stub ✅, Korpus-Anbindung + CI-Skript offen (→ Paket C)
 
 ### Verdict-Cache-Format (JSON, Datei `~/.cache/catehunt/verdicts.json` bzw. Projekt-`.catehunt/cache.json`)

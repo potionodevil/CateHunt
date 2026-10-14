@@ -32,7 +32,10 @@ pub fn parse_cargo_lock(content: &str) -> Vec<Dependency> {
     let mut version = String::new();
     let mut source = String::new();
     let mut in_pkg = false;
-    let flush = |name: &mut String, version: &mut String, source: &mut String, out: &mut Vec<Dependency>| {
+    let flush = |name: &mut String,
+                 version: &mut String,
+                 source: &mut String,
+                 out: &mut Vec<Dependency>| {
         if !name.is_empty() {
             out.push(Dependency {
                 name: std::mem::take(name),
@@ -77,7 +80,11 @@ pub fn parse_cargo_lock(content: &str) -> Vec<Dependency> {
 }
 
 fn kv_value(line: &str, key: &str) -> Option<String> {
-    let rest = line.strip_prefix(key)?.trim_start().strip_prefix('=')?.trim();
+    let rest = line
+        .strip_prefix(key)?
+        .trim_start()
+        .strip_prefix('=')?
+        .trim();
     let v = rest.trim_matches('"').to_string();
     Some(v)
 }
@@ -170,7 +177,11 @@ fn edit_distance_one(a: &str, b: &str) -> bool {
     if ac.len() == bc.len() {
         ac.iter().zip(bc.iter()).filter(|(x, y)| x != y).count() == 1
     } else if ac.len() + 1 == bc.len() || bc.len() + 1 == ac.len() {
-        let (short, long) = if ac.len() < bc.len() { (ac, bc) } else { (bc, ac) };
+        let (short, long) = if ac.len() < bc.len() {
+            (ac, bc)
+        } else {
+            (bc, ac)
+        };
         let mut i = 0;
         let mut j = 0;
         let mut skipped = false;

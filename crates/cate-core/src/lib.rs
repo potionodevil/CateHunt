@@ -1,23 +1,21 @@
 //! cate-core: Metriken (Verschachtelungstiefe, Funktionslaenge, Duplikat-Hashes),
 //! Evidence-Level E0-E4, Health-Score Stub.
+pub mod redact;
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
 /// Evidence-Level nach Masterplan: E0 (unbelegt) bis E4 (verifiziert/laufzeitbestaetigt).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default, Serialize, Deserialize,
+)]
 pub enum EvidenceLevel {
+    #[default]
     E0,
     E1,
     E2,
     E3,
     E4,
-}
-
-impl Default for EvidenceLevel {
-    fn default() -> Self {
-        EvidenceLevel::E0
-    }
 }
 
 impl std::fmt::Display for EvidenceLevel {

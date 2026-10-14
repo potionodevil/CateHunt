@@ -6,10 +6,16 @@
 //! wird zu `demote` + `policy_override: true`.
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::DefaultHasher;
+use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
+use std::io;
+use std::path::Path;
 
 /// moegliche Aktionen eines Triage-Verdicts.
+/// Serialisiert kleingeschrieben (`open|demote|close`), damit JSONL-Cache
+/// und Harness-Fixtures dasselbe Vokabular nutzen.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum VerdictAction {
     Open,
     Demote,
@@ -50,8 +56,7 @@ pub fn normalize_cwe(cwe: &str) -> String {
         .or_else(|| t.strip_prefix("CWE "))
         .or_else(|| t.strip_prefix("CWE"))
         .unwrap_or(&t);
-    rest
-        .trim()
+    rest.trim()
         .chars()
         .filter(|c| *c != '-' && *c != ' ')
         .collect()
@@ -107,10 +112,7 @@ pub fn normalize_code(source: &str) -> String {
                 Some(i) => &l[..i],
                 None => l,
             };
-            no_comment
-                .split_whitespace()
-                .collect::<Vec<_>>()
-                .join(" ")
+            no_comment.split_whitespace().collect::<Vec<_>>().join(" ")
         })
         .filter(|l| !l.is_empty())
         .collect::<Vec<_>>()
@@ -122,6 +124,84 @@ pub fn code_hash(source: &str) -> String {
     let mut h = DefaultHasher::new();
     normalize_code(source).hash(&mut h);
     format!("{:016x}", h.finish())
+}
+
+/// Ein Cache-Eintrag = eine JSONL-Zeile im Verdict-Cache.
+/// Top-Level-Keys `fingerprint` + `action` (geflattet) bleiben
+/// harness-kompatibel (`harness.py` liest genau diese Keys).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CacheRecord {
+    pub fingerprint: String,
+    #[serde(flatten)]
+    pub verdict: Verdict,
+    #[serde(default)]
+    pub created_at: String,
+}
+
+/// parst Aktions-Aliase aus CLI/Harness-Vokabular:
+/// `open|confirm`, `demote|escalate`, `close|suppress`.
+pub fn parse_action(s: &str) -> Option<VerdictAction> {
+    match s.trim().to_ascii_lowercase().as_str() {
+        "open" | "confirm" => Some(VerdictAction::Open),
+        "demote" | "escalate" => Some(VerdictAction::Demote),
+        "close" | "suppress" => Some(VerdictAction::Close),
+        _ => None,
+    }
+}
+
+/// Cache-Hit ohne Modell-Call: Nachschlagen per Fingerprint.
+pub fn lookup<'a>(
+    cache: &'a HashMap<String, CacheRecord>,
+    fingerprint: &str,
+) -> Option<&'a CacheRecord> {
+    cache.get(fingerprint)
+}
+
+/// laedt den JSONL-Cache; fehlende Datei = leerer Cache (kein Fehler).
+/// Leere Zeilen werden uebersprungen, kaputte Zeilen sind Fehler.
+pub fn load_cache(path: &Path) -> io::Result<HashMap<String, CacheRecord>> {
+    let mut out = HashMap::new();
+    if !path.exists() {
+        return Ok(out);
+    }
+    let content = std::fs::read_to_string(path)?;
+    for (n, line) in content.lines().enumerate() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let rec: CacheRecord = serde_json::from_str(line).map_err(|e| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("{}:{}: {e}", path.display(), n + 1),
+            )
+        })?;
+        out.insert(rec.fingerprint.clone(), rec);
+    }
+    Ok(out)
+}
+
+/// haengt ein Verdict als JSONL-Zeile an; wendet vorher `apply_policy` an
+/// (Deny-CWE: `close`/`suppress` -> `demote`/`escalate` + Override-Flag).
+/// Rueckgabe: true, wenn die Policy eingegriffen hat.
+pub fn store_verdict(path: &Path, record: &CacheRecord) -> io::Result<bool> {
+    let mut rec = record.clone();
+    let overridden = apply_policy(&mut rec.verdict);
+    if let Some(parent) = path.parent() {
+        if !parent.as_os_str().is_empty() {
+            std::fs::create_dir_all(parent)?;
+        }
+    }
+    let mut line = serde_json::to_string(&rec)
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?;
+    line.push('\n');
+    use std::io::Write;
+    let mut f = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)?;
+    f.write_all(line.as_bytes())?;
+    Ok(overridden)
 }
 
 #[cfg(test)]
@@ -200,8 +280,8 @@ mod tests {
     fn deny_list_blocks_close_on_all_deny_cwes() {
         // Negativ-Test: close auf JEDER Deny-CWE muss zu demote + Override werden.
         let deny = [
-            "327", "328", "326", "331", "338", "259", "798", "321", "287", "384", "613",
-            "620", "639", "862", "863", "502", "915",
+            "327", "328", "326", "331", "338", "259", "798", "321", "287", "384", "613", "620",
+            "639", "862", "863", "502", "915",
         ];
         assert_eq!(deny.len(), 17);
         for cwe in deny {
@@ -226,7 +306,14 @@ mod tests {
 
     #[test]
     fn cwe_spellings_normalize_to_same_cap() {
-        for variant in ["CWE-328", "cwe-328", "CWE328", "cwe328", "  CWE-328  ", "CWE 328"] {
+        for variant in [
+            "CWE-328",
+            "cwe-328",
+            "CWE328",
+            "cwe328",
+            "  CWE-328  ",
+            "CWE 328",
+        ] {
             assert_eq!(normalize_cwe(variant), "328", "Variante: {variant}");
             assert_eq!(verdict_cap(variant), MaxAction::DemoteOnly);
         }
