@@ -33,10 +33,8 @@ Voraussetzungen (einmalig, mit Netz):
    ggf. `~/.cargo/bin` in PATH).
 2. WebView2-Runtime (auf Win10/11 meist vorinstalliert; sonst
    Evergreen-Installer von Microsoft).
-3. NSIS 3 (`winget install NSIS.NSIS`) — nur für das `.exe`-Setup nötig.
-   Stand 2026-10-14 auf dieser Maschine: NICHT installiert.
-4. MSVC-Build-Tools (link.exe) für `cargo build`. Stand 2026-10-14 auf dieser
-   Maschine: KEIN MSVC-Linker (nur git-bash-`link.exe`-Namensvetter).
+3. NSIS 3 — Installation läuft (s. Stand 2026-10-14 22:00 unten).
+4. MSVC-Build-Tools (link.exe) — ⏳ Installation läuft (s. unten).
 
 Befehle:
 - `cd src-tauri && cargo tauri build` → erzeugt u.a.
