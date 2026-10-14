@@ -8,6 +8,7 @@ version = "0.1.0"
 dependencies = [
  "cate-core",
  "cate-deps",
+ "cate-graph",
  "cate-sarif",
  "cate-triage",
  "serde",
@@ -32,10 +33,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "cate-graph"
+version = "0.1.0"
+dependencies = [
+ "cate-core",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "cate-sarif"
 version = "0.1.0"
 dependencies = [
  "cate-core",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "cate-stages"
+version = "0.1.0"
+dependencies = [
+ "cate-core",
+ "cate-triage",
  "serde",
  "serde_json",
 ]

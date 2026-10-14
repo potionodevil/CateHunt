@@ -11,6 +11,7 @@ fn main() {
     let cmd = args.get(1).map(|s| s.as_str()).unwrap_or("--help");
     match cmd {
         "scan" => cmd_scan(&args[2..]),
+        "graph" => cmd_graph(&args[2..]),
         "triage" => cmd_triage(&args[2..]),
         "--help" | "-h" | "help" => print_help(),
         "--version" | "-V" | "version" => println!("cate {VERSION}"),
@@ -27,6 +28,7 @@ fn print_help() {
     println!();
     println!("USAGE:");
     println!("    cate scan --path <dir> [--format json] [--sarif <file>] [--base <rev>]");
+    println!("    cate graph --path <dir> [--out <file>]");
     println!("    cate triage --cache <file> --fingerprint <fp> [--rule-id <id> --cwe <cwe> --action <open|demote|close> --code-hash <h>]");
     println!("    cate --version | --help");
 }
@@ -274,6 +276,77 @@ fn cmd_triage(raw: &[String]) {
             eprintln!("{e}\n");
             print_help();
             std::process::exit(2);
+        }
+    }
+}
+
+/// `cate graph --path <dir> [--out <file>]`: Modulgraph als JSON
+/// (Modulbaum + Health) auf stdout oder in Datei exportieren.
+fn cmd_graph(raw: &[String]) {
+    let mut path: Option<PathBuf> = None;
+    let mut out: Option<PathBuf> = None;
+    let mut i = 0;
+    while i < raw.len() {
+        match raw[i].as_str() {
+            "--path" => {
+                i += 1;
+                match raw.get(i) {
+                    Some(v) => path = Some(v.into()),
+                    None => {
+                        eprintln!("--path needs a value\n");
+                        print_help();
+                        std::process::exit(2);
+                    }
+                }
+            }
+            "--out" => {
+                i += 1;
+                match raw.get(i) {
+                    Some(v) => out = Some(v.into()),
+                    None => {
+                        eprintln!("--out needs a value\n");
+                        print_help();
+                        std::process::exit(2);
+                    }
+                }
+            }
+            other => {
+                eprintln!("unknown flag: {other}\n");
+                print_help();
+                std::process::exit(2);
+            }
+        }
+        i += 1;
+    }
+    let path = match path {
+        Some(p) => p,
+        None => {
+            eprintln!("missing --path <dir>\n");
+            print_help();
+            std::process::exit(2);
+        }
+    };
+    let root = match std::fs::canonicalize(&path) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("scan failed: cannot resolve path {}: {e}", path.display());
+            std::process::exit(1);
+        }
+    };
+    match cate_graph::get_graph_json(&root) {
+        Ok(json) => {
+            if let Some(f) = out {
+                if let Err(e) = std::fs::write(&f, &json) {
+                    eprintln!("graph export failed: {e}");
+                    std::process::exit(1);
+                }
+            } else {
+                println!("{json}");
+            }
+        }
+        Err(e) => {
+            eprintln!("graph failed: {e}");
+            std::process::exit(1);
         }
     }
 }

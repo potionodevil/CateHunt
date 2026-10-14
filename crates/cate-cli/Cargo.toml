@@ -14,3 +14,4 @@ cate-core = { path = "../cate-core" }
 cate-sarif = { path = "../cate-sarif" }
 cate-deps = { path = "../cate-deps" }
 cate-triage = { path = "../cate-triage" }
+cate-graph = { path = "../cate-graph" }
