@@ -1,3 +1,5 @@
+// Copyright (c) 2026 R.S. - Geistiges Eigentum von R.S. Kopieren, Vervielfaeltigung
+// oder Veraenderung ohne ausdrueckliche Genehmigung nicht erlaubt.
 //! cate CLI: `scan --path <dir> --format json`
 use cate_core::{analyze_file, health_score_stub, FileMetrics};
 use std::path::{Path, PathBuf};

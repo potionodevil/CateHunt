@@ -1,3 +1,5 @@
+// Copyright (c) 2026 R.S. - Geistiges Eigentum von R.S. Kopieren, Vervielfaeltigung
+// oder Veraenderung ohne ausdrueckliche Genehmigung nicht erlaubt.
 //! cate-sarif: SARIF Minimal-Import (Evidence E1).
 use cate_core::EvidenceLevel;
 use serde::{Deserialize, Serialize};

@@ -1,3 +1,5 @@
+// Copyright (c) 2026 R.S. - Geistiges Eigentum von R.S. Kopieren, Vervielfaeltigung
+// oder Veraenderung ohne ausdrueckliche Genehmigung nicht erlaubt.
 //! cate-deps: Lockfile-Parser (cargo/package-lock) + Registry-Check Stub
 //! (Slopsquatting: Existenz/Alter/Downloads).
 use cate_core::EvidenceLevel;

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Copyright (c) 2026 R.S. - Geistiges Eigentum von R.S. Kopieren, Vervielfaeltigung
+# oder Veraenderung ohne ausdrueckliche Genehmigung nicht erlaubt.
 """CateHunt Benchmark-Harness (Phase 2 + Paket C).
 
 Vermisst Triage-Entscheidungen gegen Benchmark-Labels und weist

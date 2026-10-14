@@ -1,3 +1,5 @@
+// Copyright (c) 2026 R.S. - Geistiges Eigentum von R.S. Kopieren, Vervielfaeltigung
+// oder Veraenderung ohne ausdrueckliche Genehmigung nicht erlaubt.
 //! Paket A — Cache-Roundtrip + Deny-Hochstufung (CWE-328).
 //!
 //! TDD RED: scheitert, bis `load_cache`/`store_verdict`/`lookup` existieren.

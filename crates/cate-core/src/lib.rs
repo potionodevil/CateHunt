@@ -1,3 +1,5 @@
+// Copyright (c) 2026 R.S. - Geistiges Eigentum von R.S. Kopieren, Vervielfaeltigung
+// oder Veraenderung ohne ausdrueckliche Genehmigung nicht erlaubt.
 //! cate-core: Metriken (Verschachtelungstiefe, Funktionslaenge, Duplikat-Hashes),
 //! Evidence-Level E0-E4, Health-Score Stub.
 pub mod redact;

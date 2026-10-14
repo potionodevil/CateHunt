@@ -1,3 +1,5 @@
+// Copyright (c) 2026 R.S. - Geistiges Eigentum von R.S. Kopieren, Vervielfaeltigung
+// oder Veraenderung ohne ausdrueckliche Genehmigung nicht erlaubt.
 //! Secrets-Redaction (Paket B, REVIEW M-8).
 //!
 //! Entfernt Secret-Material aus Strings (Logs, Reports, Prompts),

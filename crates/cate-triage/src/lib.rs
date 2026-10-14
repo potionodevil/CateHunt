@@ -1,3 +1,5 @@
+// Copyright (c) 2026 R.S. - Geistiges Eigentum von R.S. Kopieren, Vervielfaeltigung
+// oder Veraenderung ohne ausdrueckliche Genehmigung nicht erlaubt.
 //! cate-triage: Deny-List-Policy + Verdict-Cache (Phase 2).
 //!
 //! Prinzip aus VALIDATION.md: Krypto / AuthN / AuthZ / Deserialisierung
