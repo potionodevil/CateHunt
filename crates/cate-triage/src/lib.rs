@@ -42,14 +42,19 @@ pub fn verdict_cap(cwe: &str) -> MaxAction {
     }
 }
 
-/// "CWE-328" -> "328", "cwe-79" -> "79".
+/// "CWE-328" -> "328", "cwe-79" -> "79", "CWE328"/"CWE 328" -> ebenso.
 pub fn normalize_cwe(cwe: &str) -> String {
     let t = cwe.trim().to_ascii_uppercase();
-    t.strip_prefix("CWE-")
+    let rest = t
+        .strip_prefix("CWE-")
+        .or_else(|| t.strip_prefix("CWE "))
         .or_else(|| t.strip_prefix("CWE"))
-        .unwrap_or(&t)
+        .unwrap_or(&t);
+    rest
         .trim()
-        .to_string()
+        .chars()
+        .filter(|c| *c != '-' && *c != ' ')
+        .collect()
 }
 
 /// ein Triage-Verdict vor Policy-Anwendung.
@@ -189,5 +194,61 @@ mod tests {
         let a = "let x = 1;  // kommentar\n\nlet y = 2;";
         let b = "let x = 1;\nlet y = 2; // anderer kommentar";
         assert_eq!(code_hash(a), code_hash(b));
+    }
+
+    #[test]
+    fn deny_list_blocks_close_on_all_deny_cwes() {
+        // Negativ-Test: close auf JEDER Deny-CWE muss zu demote + Override werden.
+        let deny = [
+            "327", "328", "326", "331", "338", "259", "798", "321", "287", "384", "613",
+            "620", "639", "862", "863", "502", "915",
+        ];
+        assert_eq!(deny.len(), 17);
+        for cwe in deny {
+            assert_eq!(verdict_cap(&format!("CWE-{cwe}")), MaxAction::DemoteOnly);
+            let mut v = Verdict {
+                rule_id: "test-rule".into(),
+                cwe: format!("CWE-{cwe}"),
+                code_hash: "abc".into(),
+                action: VerdictAction::Close,
+                severity_after: "high".into(),
+                model: "test".into(),
+                prompt_version: "v1".into(),
+                tokens_in: 0,
+                tokens_out: 0,
+                policy_override: false,
+            };
+            assert!(apply_policy(&mut v), "policy griff nicht ein bei {cwe}");
+            assert_eq!(v.action, VerdictAction::Demote);
+            assert!(v.policy_override);
+        }
+    }
+
+    #[test]
+    fn cwe_spellings_normalize_to_same_cap() {
+        for variant in ["CWE-328", "cwe-328", "CWE328", "cwe328", "  CWE-328  ", "CWE 328"] {
+            assert_eq!(normalize_cwe(variant), "328", "Variante: {variant}");
+            assert_eq!(verdict_cap(variant), MaxAction::DemoteOnly);
+        }
+        // Leere/Unbekannte CWE faellt auf Close-Cap zurueck, crasht aber nicht.
+        assert_eq!(verdict_cap(""), MaxAction::Close);
+        assert_eq!(verdict_cap("CWE-9999"), MaxAction::Close);
+    }
+
+    #[test]
+    fn empty_code_is_stable() {
+        assert_eq!(normalize_code(""), "");
+        assert_eq!(normalize_code("   \n  // nur kommentar\n  "), "");
+        assert_eq!(code_hash(""), code_hash(""));
+        assert_eq!(code_hash(""), code_hash("// nur kommentar"));
+    }
+
+    #[test]
+    fn unicode_code_does_not_panic_and_is_stable() {
+        let a = "# Gr\u{00fc}\u{00df}e \u{1f510}\npasswort = \"s\u{00fc}\u{00df}\u{00e9}123\"  // Kommentar \u{00e4}\u{00f6}\u{00fc}\n";
+        let b = "# Gr\u{00fc}\u{00df}e \u{1f510}\npasswort   =   \"s\u{00fc}\u{00df}\u{00e9}123\" // anderer Kommentar";
+        assert_eq!(code_hash(a), code_hash(b));
+        assert_ne!(code_hash(a), code_hash(""));
+        assert_ne!(code_hash(a), code_hash("v\u{00f6}llig anderer code"));
     }
 }
