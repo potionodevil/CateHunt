@@ -1,0 +1,15 @@
+[package]
+name = "cate-cli"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "cate"
+path = "src/main.rs"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+cate-core = { path = "../cate-core" }
+cate-sarif = { path = "../cate-sarif" }
+cate-deps = { path = "../cate-deps" }
