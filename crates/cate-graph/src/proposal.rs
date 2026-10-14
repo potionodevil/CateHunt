@@ -101,6 +101,41 @@ pub fn proposals_to_json(proposals: &[Proposal]) -> Result<String, String> {
     serde_json::to_string_pretty(proposals).map_err(|e| format!("json: {e}"))
 }
 
+/// Audit-Log-Eintrag: wer hat was mit welcher Begruendung angewendet.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AuditEntry {
+    pub proposal_id: String,
+    pub event: String,
+    pub actor: String,
+    pub rationale: String,
+}
+
+/// Apply mit Gate: nur `Approved` darf applied werden — sonst
+/// `APPROVAL_REQUIRED` (kein Apply ohne Zustimmung, auto_apply=false
+/// ohne Vorab-Genehmigung eingeschlossen). Erfolgreicher Apply schreibt
+/// einen Audit-Log-Eintrag (wer/was/Begruendung).
+pub fn request_apply(
+    p: &mut Proposal,
+    _auto_apply: bool,
+    actor: &str,
+    audit: &mut Vec<AuditEntry>,
+) -> Result<(), String> {
+    if p.status != ProposalStatus::Approved {
+        return Err(format!(
+            "APPROVAL_REQUIRED: apply nur nach approval moeglich (aktuell {:?})",
+            p.status
+        ));
+    }
+    p.apply()?;
+    audit.push(AuditEntry {
+        proposal_id: p.id.clone(),
+        event: "applied".to_string(),
+        actor: actor.to_string(),
+        rationale: p.rationale.clone(),
+    });
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -165,6 +165,9 @@ pub fn parse_proposal(raw: &str, cwe: &str) -> Result<LlmProposal, String> {
         .and_then(|x| x.as_str())
         .unwrap_or("")
         .to_string();
+    if reason.trim().is_empty() {
+        return Err("Feld 'reason' fehlt oder leer (Begruendung ist Pflicht)".to_string());
+    }
     if reason.len() > 280 {
         reason.truncate(280);
     }

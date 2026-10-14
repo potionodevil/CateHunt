@@ -1,0 +1,14 @@
+{
+  "health": {
+    "by_level": {
+      "error": 1,
+      "warning": 1
+    },
+    "dependencies": 90,
+    "security": 77,
+    "structure": 98,
+    "total": 88,
+    "total_e2_plus": 2
+  },
+  "schema_version": "health/v1"
+}

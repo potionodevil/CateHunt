@@ -567,4 +567,101 @@ mod tests {
         );
         std::fs::remove_dir_all(&root).ok();
     }
+
+    // ---- P1 Vektor-Suite Path-Jail (TESTING.md §1.2) ----
+    // cargo-fuzz offline nicht verfuegbar -> deterministische Vektoren.
+    // Invariante: kanonischer Pfad ausserhalb Root => Reject.
+
+    #[test]
+    fn jail_vectors_dotdot_absolute_unc_overlong() {
+        let root = tmp_root("jailvec");
+        let root_c = std::fs::canonicalize(&root).unwrap();
+        let sub = root_c.join("sub");
+        std::fs::create_dir_all(&sub).unwrap();
+        // (Name, kanonischer Kandidat, erwartet innen?)
+        let outside = root_c.parent().unwrap_or(Path::new("/")).to_path_buf();
+        let unc = PathBuf::from("\\\\?\\C:\\Windows\\System32");
+        let overlong_inside = root_c.join("a".repeat(200) + ".rs");
+        let cases: Vec<(&str, PathBuf, bool)> = vec![
+            ("plain_inside", root_c.join("a.rs"), true),
+            ("nested_inside", sub.join("b.rs"), true),
+            ("overlong_inside", overlong_inside, true),
+            ("parent_dir", outside.clone(), false),
+            ("unc_absolute", unc, false),
+            ("unix_absolute", PathBuf::from("/etc/passwd"), false),
+        ];
+        for (name, cand, want_inside) in &cases {
+            assert_eq!(
+                is_within_jail(&root_c, cand),
+                *want_inside,
+                "Jail-Vektor {name}: {cand:?}"
+            );
+        }
+        // Traversal via kanonisierte Pfade: sub/../../.. entkommt.
+        let escaped = std::fs::canonicalize(&sub)
+            .unwrap()
+            .join("..")
+            .join("..")
+            .join("..");
+        // Lexikalisch noch "innen" (starts_with) — erst nach
+        // Kanonisierung (wie an den Call-Sites) faellt der Check.
+        let canon = std::fs::canonicalize(&escaped).unwrap_or(escaped);
+        if canon != root_c && !canon.starts_with(&root_c) {
+            assert!(!is_within_jail(&root_c, &canon), "../-Escape entkommt");
+        }
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn symlink_chain_stays_in_jail() {
+        // Kette link2 -> link1 -> aussen: nur innen liegende Ziele ok.
+        let root = tmp_root("jailchain");
+        let outside_dir = tmp_root("jailchain_out");
+        std::fs::write(root.join("ok.rs"), "fn ok() {}\n").unwrap();
+        std::fs::write(outside_dir.join("secret.rs"), "fn s() {}\n").unwrap();
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink(outside_dir.join("secret.rs"), root.join("link1.rs"))
+                .unwrap();
+            std::os::unix::fs::symlink(root.join("link1.rs"), root.join("link2.rs")).unwrap();
+        }
+        #[cfg(windows)]
+        {
+            if std::os::windows::fs::symlink_file(
+                outside_dir.join("secret.rs"),
+                root.join("link1.rs"),
+            )
+            .is_err()
+            {
+                std::fs::remove_dir_all(&root).ok();
+                std::fs::remove_dir_all(&outside_dir).ok();
+                return;
+            }
+            std::os::windows::fs::symlink_file(root.join("link1.rs"), root.join("link2.rs")).ok();
+        }
+        let root_c = std::fs::canonicalize(&root).unwrap();
+        let files = collect_source_files(&root_c);
+        let names: Vec<String> = files
+            .iter()
+            .filter_map(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()))
+            .collect();
+        assert!(
+            !names.contains(&"secret.rs".to_string()),
+            "Ketten-Escape: {names:?}"
+        );
+        assert!(
+            !names.contains(&"link1.rs".to_string()),
+            "Link nach aussen: {names:?}"
+        );
+        assert!(
+            !names.contains(&"link2.rs".to_string()),
+            "Ketten-Link: {names:?}"
+        );
+        assert!(
+            names.contains(&"ok.rs".to_string()),
+            "ok.rs fehlt: {names:?}"
+        );
+        std::fs::remove_dir_all(&root).ok();
+        std::fs::remove_dir_all(&outside_dir).ok();
+    }
 }

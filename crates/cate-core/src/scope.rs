@@ -46,6 +46,11 @@ pub fn parse_git_diff_name_status(output: &str) -> Vec<ChangedFile> {
         if path.is_empty() {
             continue;
         }
+        // NUL-Bytes sind auf keinem Ziel-OS gueltige Pfadbestandteile
+        // und wuerden spaetere OS-Aufrufe sprengen -> Eintrag verwerfen.
+        if path.contains('\0') {
+            continue;
+        }
         out.push(ChangedFile { status, path });
     }
     out

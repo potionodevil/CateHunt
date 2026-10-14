@@ -1,0 +1,39 @@
+{
+  "graph": {
+    "edges": [
+      {
+        "from": "foo",
+        "to": "bar"
+      },
+      {
+        "from": "main",
+        "to": "bar"
+      },
+      {
+        "from": "main",
+        "to": "foo"
+      }
+    ],
+    "nodes": [
+      {
+        "color": "green",
+        "health": 100,
+        "id": "bar",
+        "path": "bar.rs"
+      },
+      {
+        "color": "green",
+        "health": 100,
+        "id": "foo",
+        "path": "foo.rs"
+      },
+      {
+        "color": "green",
+        "health": 100,
+        "id": "main",
+        "path": "main.rs"
+      }
+    ]
+  },
+  "schema_version": "graph/v1"
+}
