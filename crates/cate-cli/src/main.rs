@@ -89,7 +89,13 @@ fn run_scan(opts: &ScanOpts) -> Result<String, String> {
     if !opts.path.exists() {
         return Err(format!("path not found: {}", opts.path.display()));
     }
-    let files = collect_source_files(&opts.path);
+    // Path-Jail: kanonisieren + Verzeichnis verlangen (B1/B2).
+    let root = std::fs::canonicalize(&opts.path)
+        .map_err(|e| format!("cannot resolve path {}: {e}", opts.path.display()))?;
+    if !root.is_dir() {
+        return Err(format!("path is not a directory: {}", opts.path.display()));
+    }
+    let files = collect_source_files(&root);
     let mut metrics: Vec<FileMetrics> = Vec::new();
     for f in &files {
         match std::fs::read_to_string(f) {
@@ -146,7 +152,10 @@ fn collect_source_files(root: &Path) -> Vec<PathBuf> {
         "rs", "js", "ts", "jsx", "tsx", "py", "go", "java", "c", "h", "cpp", "hpp", "cs", "rb",
         "php",
     ];
+    // root ist bereits kanonisiert (s. run_scan); Jail-Anker + Loop-Schutz.
     let mut out = Vec::new();
+    let mut visited: std::collections::HashSet<PathBuf> = std::collections::HashSet::new();
+    visited.insert(root.to_path_buf());
     let mut stack = vec![root.to_path_buf()];
     while let Some(dir) = stack.pop() {
         let entries = match std::fs::read_dir(&dir) {
@@ -155,12 +164,47 @@ fn collect_source_files(root: &Path) -> Vec<PathBuf> {
         };
         for entry in entries.flatten() {
             let p = entry.path();
+            // Symlink-Check ohne Folgen: zeigt das Ziel ausserhalb Root -> skip.
+            let meta = match std::fs::symlink_metadata(&p) {
+                Ok(m) => m,
+                Err(_) => continue,
+            };
+            if meta.file_type().is_symlink() {
+                let target = match std::fs::canonicalize(&p) {
+                    Ok(t) => t,
+                    Err(_) => continue, // toter Link: skip
+                };
+                if !target.starts_with(root) {
+                    eprintln!("warn: skip symlink outside root: {}", p.display());
+                    continue;
+                }
+                // Symlink innerhalb Root: als Datei werten bzw. Dir mit Loop-Schutz.
+                if target.is_dir() {
+                    if visited.insert(target.clone()) {
+                        stack.push(target);
+                    }
+                    continue;
+                }
+                if let Some(ext) = target.extension().and_then(|e| e.to_str()) {
+                    if EXTS.contains(&ext) {
+                        out.push(target);
+                    }
+                }
+                continue;
+            }
             if p.is_dir() {
                 let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
                 if matches!(name, "target" | ".git" | "node_modules" | "dist" | "build") {
                     continue;
                 }
-                stack.push(p);
+                // Kanonisierte Dirs gegen Loops (z.B. Junctions) absichern.
+                let canon = std::fs::canonicalize(&p).unwrap_or_else(|_| p.clone());
+                if !canon.starts_with(root) {
+                    continue;
+                }
+                if visited.insert(canon.clone()) {
+                    stack.push(canon);
+                }
             } else if let Some(ext) = p.extension().and_then(|e| e.to_str()) {
                 if EXTS.contains(&ext) {
                     out.push(p);

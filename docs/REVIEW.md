@@ -15,6 +15,8 @@ Ursprüngliches Ergebnis zum Prüfzeitpunkt (Race, Workspace leer): 🔴 ROT.
 
 Nachtrag 2026-10-14 (Phase-2-Commit): M-1 ✅ (PLAN.md, 5 Crates inkl. cate-triage, VALIDATION.md vorhanden, `cargo test` grün). M-3 teilweise (Verdict-Cache-Schema + Fingerprint implementiert, JSONL-Persistenz/CLI-Anbindung offen). M-7 teilweise (CLI jailt noch keine Pfade ausserhalb Root — `collect_source_files` folgt Symlinks, kein Canonicalize-Check). Rest offen.
 
+Nachtrag 2026-10-14 (Checker E2E-Repro + Fix): `cargo test` grün (16 Tests: 3 core + 2 deps + 1 sarif + 10 triage), `cate scan` auf `./corpus` (8 Dateien) und `E:/CodeCate` (14 Dateien) ohne Crash, JSON valide, Harness-Demo `PASSED` (suppression_rate 0.0). Bugs B-1 (MUST, Symlink-Escape mit Hang >120s) und B-2 (SHOULD, Datei-als-Pfad still 0/exit 0) in `crates/cate-cli/src/main.rs` behoben: Root wird kanonisiert, Datei-als-Pfad → exit 1, Symlinks ausserhalb Root werden geskipt (Warnung), Loop-Schutz via Visited-Set; Repros erneut verifiziert. Offen: M-2/M-4/M-5/M-6 (Sandbox, MCP, AI-BOM, Trend), Secrets-Redaction (kein Leak — Output enthält keine Inhalte — aber keine Redaction-Schicht), Registry-Check weiter Stub.
+
 Re-Review-Trigger: sobald `docs/PLAN.md` + mind. 1 Crate + `docs/VALIDATION.md` existieren.
 
 ## 2. Methodik
@@ -43,6 +45,13 @@ Re-Review-Trigger: sobald `docs/PLAN.md` + mind. 1 Crate + `docs/VALIDATION.md` 
 11. **S-3: „Niemals automatisch unterdrücken" enforcebar machen.** — Suppress braucht Begründung + Reviewer + Ablaufdatum; Default: sichtbar. Test: Suppress-ohne-Begründung wird abgelehnt.
 12. **S-4: Konkurrenzabgrenzung belegen (Datadog, HackerOne, sast-triage).** — PLAN.md sollte für jede Konkurrenz 1 differenzierenden, testbaren Claim enthalten, sonst Marketing-Prosa.
 13. **S-5: Fehler- und Timeout-Verhalten der Scanner-Adapter definieren.** — Timeouts, Teilausfälle, widersprüchliche Befunde: deterministisches Verhalten + Tests.
+
+### Checker-E2E-Befunde 2026-10-14 (mit Repro, Status: behoben bzw. offen)
+
+- **B-1 (MUST, BEHOBEN): Symlink-Escape aus Scan-Root + Hang (DoS).** — `collect_source_files` folgte Symlinks blind; Scan eines Dir-Symlinks auf `C:/Windows` hing >120s (Timeout). Repro: `python -c "import os; os.symlink('C:/Windows','target/evil_win',target_is_directory=True)" && timeout 60 ./target/debug/cate.exe scan --path ./target/evil_win --format json`. Fix (`crates/cate-cli/src/main.rs`): Root kanonisieren, `symlink_metadata`-Check, Ziele ausserhalb Root skippen (Warnung), Visited-Set gegen Loops. Repro nach Fix: `warn: skip symlink outside root`, exit 0 in <2s, nur In-Root-Dateien.
+- **B-2 (SHOULD, BEHOBEN): Datei-als-`--path` meldet still Erfolg.** — `cate scan --path ./Cargo.toml --format json` gab `files_scanned: 0`, exit 0 zurück (irreführend). Repro: s. Befehl. Fix: `run_scan` verlangt Verzeichnis (`path is not a directory`, exit 1). Repro nach Fix: exit 1 mit Fehlermeldung.
+- **B-3 (SHOULD, OFFEN): Keine Secrets-Redaction-Schicht.** — Aktuell kein Leak (Output enthält nur Metriken/Pfade, keine Inhalte — verifiziert mit `api_key = "AKIA..."`-Probendatei), aber auch keine Redaction-Regeln an Pfaden/Logs; M-8 bleibt offen. Ausser Scope für diesen Fix (kein Gross-Feature).
+- **B-4 (SHOULD, OFFEN): Registry-Check ist Stub** (`exists` ohne Netzprüfung), Tree-sitter-Metriken sind Heuristiken — dokumentiert, keine Änderung (keine Gross-Features).
 
 ### NICE (nach MVP)
 
