@@ -14,3 +14,4 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 cate-core = { path = "../crates/cate-core" }
 cate-triage = { path = "../crates/cate-triage" }
+cate-graph = { path = "../crates/cate-graph" }

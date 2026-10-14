@@ -101,7 +101,12 @@ impl ModuleParser for RustModuleParser {
                     .take_while(|c| c.is_alphanumeric() || *c == '_')
                     .collect();
                 if !name.is_empty() {
-                    deps.push(vec![name]);
+                    // Nur `mod foo;` ist ein Datei-Modul; `mod foo {`
+                    // (z.B. `mod tests {`) ist inline und erzeugt keine Kante.
+                    let after = rest[name.len()..].trim_start();
+                    if after.starts_with(';') {
+                        deps.push(vec![name]);
+                    }
                 }
                 continue;
             }
@@ -188,7 +193,7 @@ pub fn build_graph<P: ModuleParser>(modules: &[(String, String)], parser: &P) ->
     for (path, src) in modules {
         let from = module_id_for_path(path);
         for segs in parser.parse_deps(src) {
-            if let Some(to) = resolve_dep(&segs, &ids) {
+            if let Some(to) = resolve_dep(&from, &segs, &ids) {
                 if to != from {
                     edge_set.insert((from.clone(), to));
                 }
@@ -202,14 +207,137 @@ pub fn build_graph<P: ModuleParser>(modules: &[(String, String)], parser: &P) ->
     ModuleGraph { nodes, edges }
 }
 
-fn resolve_dep(segs: &[String], ids: &BTreeSet<String>) -> Option<String> {
+fn norm_seg(s: &str) -> String {
+    s.replace('-', "_").to_ascii_lowercase()
+}
+
+fn norm_id(id: &str) -> Vec<String> {
+    id.split('/').map(norm_seg).collect()
+}
+
+fn resolve_dep(from: &str, segs: &[String], ids: &BTreeSet<String>) -> Option<String> {
     if segs.is_empty() {
         return None;
     }
+    // 1) Exakter Vollpfad / Prefix wie bisher (z.B. flache Module).
     for len in (1..=segs.len()).rev() {
         let cand = segs[..len].join("/");
         if ids.contains(&cand) {
             return Some(cand);
+        }
+    }
+    let nsegs: Vec<String> = segs.iter().map(|s| norm_seg(s)).collect();
+    // Normierte Lookup-Tabelle id -> Segmente.
+    let mut best: Option<String> = None;
+    // 2) Geschwister-Aufloesung: Verzeichnis von `from` + segs pruefen.
+    if let Some(slash_pos) = from.rfind('/') {
+        let parent = &from[..slash_pos];
+        for len in (1..=segs.len()).rev() {
+            let cand = format!("{parent}/{}", segs[..len].join("/"));
+            if ids.contains(&cand) {
+                return Some(cand);
+            }
+            // normiert
+            let nparent = norm_id(parent).join("/");
+            let ncand = format!("{nparent}/{}", nsegs[..len].join("/"));
+            for id in ids {
+                if norm_id(id).join("/") == ncand {
+                    return Some(id.clone());
+                }
+            }
+        }
+    }
+    // 3) Crate-uebergreifend: erstes Segment = Crate-Name (cate_core ~ cate-core).
+    // Rest-Segmente als Suffix im Ziel suchen; ohne Rest auf Crate-Root zeigen.
+    if !nsegs.is_empty() {
+        let mut candidates: Vec<&String> = ids
+            .iter()
+            .filter(|id| norm_id(id).iter().any(|p| *p == nsegs[0]))
+            .collect();
+        candidates.sort();
+        if !candidates.is_empty() {
+            if nsegs.len() > 1 {
+                let tail = nsegs[1..].join("/");
+                // laengstes Suffix zuerst, Root bevorzugen (lib/main/mod).
+                let mut suffix_hits: Vec<&String> = candidates
+                    .iter()
+                    .filter(|id| {
+                        let n = norm_id(id).join("/");
+                        n.ends_with(&tail)
+                    })
+                    .copied()
+                    .collect();
+                suffix_hits.sort_by_key(|id| {
+                    let leaf = id.rsplit('/').next().unwrap_or("");
+                    let is_leaf = leaf == nsegs.last().map(String::as_str).unwrap_or("");
+                    let is_root = leaf == "lib" || leaf == "main" || leaf == "mod";
+                    ((!is_leaf) as u8, !is_root as u8, id.len())
+                });
+                if let Some(hit) = suffix_hits.into_iter().next() {
+                    return Some(hit.clone());
+                }
+                // Item (Typ/Funktion) unbekannt: wenigstens Crate-Abhaengigkeit
+                // auf die Crate-Root (lib/main/mod) abbilden, sonst None.
+                // Kandidaten sind bereits auf das Crate-Segment eingeschraenkt.
+                let mut roots: Vec<&String> = candidates
+                    .iter()
+                    .filter(|id| {
+                        matches!(id.rsplit('/').next().unwrap_or(""), "lib" | "main" | "mod")
+                    })
+                    .copied()
+                    .collect();
+                roots.sort_by_key(|id| id.len());
+                if let Some(r) = roots.into_iter().next() {
+                    return Some(r.clone());
+                }
+                return None;
+            } else {
+                // `use <crate>;` (externer Crate-Name): das Segment muss ein
+                // Crate-Verzeichnis sein (direkt gefolgt von `src/`).
+                // Lose `mod`-Namen ohne Datei fallen hier NICHT mehr hin.
+                let crate_dirs: Vec<&String> = candidates
+                    .iter()
+                    .filter(|id| {
+                        norm_id(id)
+                            .windows(2)
+                            .any(|w| w[0] == nsegs[0] && w[1] == "src")
+                    })
+                    .copied()
+                    .collect();
+                if crate_dirs.is_empty() {
+                    return None;
+                }
+                let mut roots: Vec<&String> = crate_dirs
+                    .iter()
+                    .filter(|id| {
+                        matches!(id.rsplit('/').next().unwrap_or(""), "lib" | "main" | "mod")
+                    })
+                    .copied()
+                    .collect();
+                roots.sort_by_key(|id| id.len());
+                if let Some(r) = roots.into_iter().next() {
+                    return Some(r.clone());
+                }
+                best = crate_dirs.into_iter().next().cloned();
+            }
+        }
+        if best.is_some() {
+            return best;
+        }
+        // 4) Fallback nur fuer mehrteilige Pfade: letztes Segment als Suffix
+        // (z.B. `use foo::bar` -> */bar). Einteilige `mod`-Namen enden hier
+        // nicht, sonst zeigen dangling `mod foo;` auf fremde Crates.
+        if nsegs.len() < 2 {
+            return None;
+        }
+        let last = &nsegs[nsegs.len() - 1];
+        let mut hits: Vec<&String> = ids
+            .iter()
+            .filter(|id| norm_id(id).last().map(|l| l == last).unwrap_or(false))
+            .collect();
+        hits.sort_by_key(|id| id.len());
+        if let Some(h) = hits.into_iter().next() {
+            return Some(h.clone());
         }
     }
     None
@@ -425,5 +553,168 @@ mod tests {
         let v: serde_json::Value = serde_json::to_value(&g).unwrap();
         assert!(v.get("nodes").is_some());
         assert!(v.get("edges").is_some());
+    }
+
+    #[test]
+    fn cross_file_use_resolves_crate_module_suffix() {
+        let modules = vec![
+            (
+                "crates/cate-cli/src/main.rs".to_string(),
+                "use cate_core::scope;\nfn main() {}".to_string(),
+            ),
+            ("crates/cate-core/src/lib.rs".to_string(), String::new()),
+            (
+                "crates/cate-core/src/scope.rs".to_string(),
+                "pub fn x() {}".to_string(),
+            ),
+        ];
+        let g = build_graph(&modules, &RustModuleParser);
+        assert!(
+            g.edges
+                .iter()
+                .any(|e| e.from == "crates/cate-cli/src/main"
+                    && e.to == "crates/cate-core/src/scope"),
+            "use cate_core::scope muss Kante bilden: {g:?}"
+        );
+    }
+
+    #[test]
+    fn cross_file_use_hyphen_underscore_normalized() {
+        let modules = vec![
+            (
+                "crates/a/src/main.rs".to_string(),
+                "use my_crate::util;\nfn main() {}".to_string(),
+            ),
+            ("crates/my-crate/src/util.rs".to_string(), String::new()),
+        ];
+        let g = build_graph(&modules, &RustModuleParser);
+        assert!(
+            g.edges.iter().any(|e| e.to == "crates/my-crate/src/util"),
+            "Bindestrich/Underscore muss matchen: {g:?}"
+        );
+    }
+
+    #[test]
+    fn cross_file_use_resolves_crate_root() {
+        let modules = vec![
+            (
+                "crates/a/src/main.rs".to_string(),
+                "use cate_core;\nfn main() {}".to_string(),
+            ),
+            ("crates/cate-core/src/lib.rs".to_string(), String::new()),
+        ];
+        let g = build_graph(&modules, &RustModuleParser);
+        assert!(
+            g.edges.iter().any(|e| e.to == "crates/cate-core/src/lib"),
+            "use <crate> muss auf Crate-Root zeigen: {g:?}"
+        );
+    }
+
+    #[test]
+    fn sibling_use_resolves_within_dir() {
+        let modules = vec![
+            ("src/a.rs".to_string(), "pub fn x() {}".to_string()),
+            (
+                "src/b.rs".to_string(),
+                "use super::a;\npub fn y() {}".to_string(),
+            ),
+            ("src/lib.rs".to_string(), "mod a;\nmod b;".to_string()),
+        ];
+        let g = build_graph(&modules, &RustModuleParser);
+        assert!(
+            g.edges.iter().any(|e| e.from == "src/b" && e.to == "src/a"),
+            "super::a muss Geschwister-Modul finden: {g:?}"
+        );
+    }
+
+    #[test]
+    fn node_color_always_matches_health_score() {
+        let modules = vec![
+            ("a.rs".to_string(), "pub fn x() {}\n".to_string()),
+            (
+                "b.rs".to_string(),
+                "use crate::a;\n".to_string() + &"// pad\n".repeat(200),
+            ),
+        ];
+        let g = build_graph(&modules, &RustModuleParser);
+        for n in &g.nodes {
+            assert_eq!(n.color, health_color(n.health), "Farbe inkonsistent: {n:?}");
+        }
+    }
+
+    #[test]
+    fn inline_mod_block_creates_no_edge() {
+        let modules = vec![
+            (
+                "src/lib.rs".to_string(),
+                "mod tests {\n #[test] fn t() {}\n}\n".to_string(),
+            ),
+            ("src/tests/golden.rs".to_string(), String::new()),
+        ];
+        let g = build_graph(&modules, &RustModuleParser);
+        assert!(
+            g.edges.is_empty(),
+            "inline `mod tests {{` ist kein Datei-Modul: {g:?}"
+        );
+    }
+
+    #[test]
+    fn file_mod_declaration_creates_edge_nested() {
+        let modules = vec![
+            (
+                "src/lib.rs".to_string(),
+                "mod foo;
+"
+                .to_string(),
+            ),
+            ("src/foo.rs".to_string(), "pub fn x() {}".to_string()),
+        ];
+        let g = build_graph(&modules, &RustModuleParser);
+        assert!(
+            g.edges
+                .iter()
+                .any(|e| e.from == "src/lib" && e.to == "src/foo"),
+            "`mod foo;` muss Datei-Modul finden: {g:?}"
+        );
+    }
+
+    #[test]
+    fn dangling_mod_tests_points_nowhere() {
+        let modules = vec![
+            (
+                "cate-core/src/lib.rs".to_string(),
+                "mod tests;\n".to_string(),
+            ),
+            ("cate-core/tests/golden.rs".to_string(), String::new()),
+        ];
+        let g = build_graph(&modules, &RustModuleParser);
+        assert!(
+            !g.edges
+                .iter()
+                .any(|e| e.from == "cate-core/src/lib" && e.to == "cate-core/tests/golden"),
+            "`mod tests;` ohne Datei darf nicht auf tests/ zeigen: {g:?}"
+        );
+    }
+
+    #[test]
+    fn use_item_falls_back_to_crate_root() {
+        let modules = vec![
+            (
+                "crates/cate-sarif/src/lib.rs".to_string(),
+                "use cate_core::EvidenceLevel;\n".to_string(),
+            ),
+            ("crates/cate-core/src/lib.rs".to_string(), String::new()),
+            (
+                "crates/cate-core/src/scope.rs".to_string(),
+                "pub fn x() {}".to_string(),
+            ),
+        ];
+        let g = build_graph(&modules, &RustModuleParser);
+        assert!(
+            g.edges.iter().any(
+                |e| e.from == "crates/cate-sarif/src/lib" && e.to == "crates/cate-core/src/lib"
+            ),
+            "`use cate_core::Item` muss wenigstens auf Crate-Root zeigen: {g:?}"
+        );
     }
 }

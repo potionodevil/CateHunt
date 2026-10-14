@@ -8,6 +8,9 @@
 use cate_triage::{verdict_cap, MaxAction};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+use std::sync::Mutex;
+
+mod fixflow;
 
 /// Ein Review-Befund (JSON-kompatibel zu ui/fixtures/findings.json).
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -104,9 +107,97 @@ fn health(path: Option<String>) -> Health {
     }
 }
 
+/// Modulgraph (`cate-graph::get_graph`): Knoten `{id, path, health, color}`
+/// + Kanten (use/mod-Abhaengigkeiten). `path` = Repo-Root (optional,
+/// Default: Arbeitsverzeichnis). Knoten-Farben folgen `health_color`
+/// (gruen > 85, gelb 60–85, rot < 60) — konsistent mit UI-`healthColor`
+/// und `cate-core`-Health-Scores. Kann der Graph nicht gebaut werden
+/// (kein Verzeichnis/keine .rs-Dateien), bleibt der Fallback:
+/// `{"nodes": [], "edges": [], "fallback": true, "reason": ...}`.
+#[tauri::command]
+fn graph(path: Option<String>) -> serde_json::Value {
+    let root = path
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")));
+    match cate_graph::get_graph(&root) {
+        Ok(g) => {
+            let mut v = serde_json::to_value(&g).unwrap_or(serde_json::Value::Null);
+            if let Some(obj) = v.as_object_mut() {
+                obj.insert("fallback".to_string(), serde_json::Value::Bool(false));
+            }
+            v
+        }
+        Err(e) => {
+            serde_json::json!({"nodes": [], "edges": [], "fallback": true, "reason": e})
+        }
+    }
+}
+
+/// Fix-Vorschlag anlegen (Status `Proposed`, read-only Default).
+/// Gibt das gespeicherte Proposal zurueck.
+#[tauri::command]
+fn suggest_fix(
+    state: tauri::State<Mutex<fixflow::FixStore>>,
+    finding_id: String,
+    title: String,
+    rationale: String,
+) -> Result<cate_graph::proposal::Proposal, String> {
+    state
+        .lock()
+        .map_err(|e| format!("store poisoned: {e}"))?
+        .suggest(&finding_id, &title, &rationale)
+}
+
+/// User-Approval zu einem Proposal (Begruendung Pflicht).
+#[tauri::command]
+fn approve_fix(
+    state: tauri::State<Mutex<fixflow::FixStore>>,
+    proposal_id: String,
+    rationale: String,
+) -> Result<cate_graph::proposal::Proposal, String> {
+    state
+        .lock()
+        .map_err(|e| format!("store poisoned: {e}"))?
+        .approve(&proposal_id, &rationale)
+}
+
+/// Fix anwenden — NUR nach Approval, sonst `APPROVAL_REQUIRED`.
+/// Erfolgreiche Applies landen im Audit-Log (`fix_audit`).
+#[tauri::command]
+fn apply_fix(
+    state: tauri::State<Mutex<fixflow::FixStore>>,
+    proposal_id: String,
+    approved_by: String,
+) -> Result<cate_graph::proposal::Proposal, String> {
+    state
+        .lock()
+        .map_err(|e| format!("store poisoned: {e}"))?
+        .apply(&proposal_id, &approved_by)
+}
+
+/// Audit-Log aller angewendeten Fixes (append-only).
+#[tauri::command]
+fn fix_audit(
+    state: tauri::State<Mutex<fixflow::FixStore>>,
+) -> Result<Vec<cate_graph::proposal::AuditEntry>, String> {
+    Ok(state
+        .lock()
+        .map_err(|e| format!("store poisoned: {e}"))?
+        .audit_log())
+}
+
 fn main() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![list_findings, health])
+        .manage(Mutex::new(fixflow::FixStore::default()))
+        .invoke_handler(tauri::generate_handler![
+            list_findings,
+            health,
+            graph,
+            suggest_fix,
+            approve_fix,
+            apply_fix,
+            fix_audit
+        ])
         .run(tauri::generate_context!())
         .expect("CateHunt backend failed to start");
 }

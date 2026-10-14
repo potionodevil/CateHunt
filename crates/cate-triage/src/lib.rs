@@ -9,6 +9,7 @@
 pub mod deep_engines;
 pub mod gemini;
 pub mod ollama;
+pub mod pipeline;
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;

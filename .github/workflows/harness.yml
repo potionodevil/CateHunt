@@ -1,0 +1,36 @@
+# Copyright (c) 2026 R.S. - Geistiges Eigentum von R.S. Kopieren, Vervielfaeltigung
+# oder Veraenderung ohne ausdrueckliche Genehmigung nicht erlaubt.
+name: harness
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  gates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - name: cargo test (workspace)
+        run: cargo test --workspace --locked
+      - name: cargo clippy (deny warnings)
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: harness gates (demo-passthrough, negativ-suppression, korpus)
+        run: |
+          python harness/harness.py --verdicts harness/tests/fixtures/verdicts_demo.jsonl --labels harness/tests/fixtures/labels.csv
+          python harness/harness.py --corpus corpus/manifest.json
+          if python harness/harness.py --verdicts harness/tests/fixtures/verdicts_fail.jsonl --labels harness/tests/fixtures/labels_fail.csv; then
+            echo "NEGATIV-CHECK FEHLT: Fail-Fixture muss FAILED liefern" >&2
+            exit 1
+          fi

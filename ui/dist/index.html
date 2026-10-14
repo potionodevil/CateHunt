@@ -8,54 +8,94 @@
 <link rel="icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP4z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==">
 <title>CateHunt — Review-Workbench</title>
 <style>
-  :root { color-scheme: light; }
-  body { font-family: system-ui, sans-serif; margin: 0; background: #f6f6f4; color: #1c1c1c; }
-  header { background: #161616; color: #fff; padding: 12px 20px; display: flex; gap: 16px; align-items: baseline; }
-  header h1 { font-size: 18px; margin: 0; }
-  #health { font-size: 14px; }
-  #health b { font-size: 20px; }
-  nav.tabs { display: flex; gap: 4px; margin-left: auto; }
-  nav.tabs button { background: #2a2a2a; color: #ddd; border: 1px solid #444; min-height: 36px; }
-  nav.tabs button[aria-selected="true"] { background: #fff; color: #161616; border-color: #fff; font-weight: 700; }
-  main { max-width: 900px; margin: 0 auto; padding: 16px; }
+  :root {
+    color-scheme: light;
+    --e0: #6e6e6e; --e1: #b98a00; --e2: #d96c00; --e3: #c81e1e; --e4: #1e7e34;
+    --e3-bg: #fdecec; --e4-bg: #e9f5ec; --e0-bg: #f1f1ef;
+    --ink: #1b1b1b; --muted: #555; --faint: #777;
+    --line: #dcdcd8; --panel: #fff; --wash: #f4f4f1;
+    --focus: #0b5ed7;
+    --radius: 8px; --gap: 10px;
+    --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: var(--font); margin: 0; background: var(--wash); color: var(--ink); font-size: 14px; line-height: 1.45; }
+  header.op { background: #141414; color: #fff; padding: 0 16px; display: flex; gap: 14px; align-items: center; min-height: 52px; position: sticky; top: 0; z-index: 10; flex-wrap: wrap; }
+  header.op h1 { font-size: 15px; margin: 0; white-space: nowrap; }
+  header.op h1 .sub { font-weight: 400; color: #bbb; font-size: 12px; margin-left: 6px; }
+  #health { font-size: 13px; color: #e8e8e8; white-space: nowrap; }
+  #health b { font-size: 18px; font-variant-numeric: tabular-nums; }
+  #health .pill { display: inline-block; font-size: 11px; font-weight: 700; border-radius: 20px; padding: 1px 9px; margin-left: 8px; vertical-align: 2px; }
+  nav.tabs { display: flex; gap: 2px; margin-left: auto; }
+  nav.tabs button { background: transparent; color: #cfcfcf; border: 0; border-bottom: 3px solid transparent; border-radius: 0; padding: 14px 12px 11px; font-size: 13px; min-height: 0; min-width: 0; }
+  nav.tabs button:hover { background: #242424; color: #fff; border-color: transparent; }
+  nav.tabs button[aria-selected="true"] { background: transparent; color: #fff; border-bottom-color: var(--e2); font-weight: 700; }
+  main { max-width: 1080px; margin: 0 auto; padding: 14px 16px 40px; }
   .view { display: none; }
   .view.active { display: block; }
-  .finding { border: 1px solid #ddd; border-left-width: 6px; border-radius: 8px; background: #fff; margin: 10px 0; padding: 10px 14px; }
-  .finding.E3 { border-left-color: #d21f1f; }
-  .finding.E2 { border-left-color: #e67e00; }
-  .finding.E1 { border-left-color: #d9b400; }
-  .finding.E4 { border-left-color: #1e9e44; }
-  .finding.E0 { border-left-color: #999; }
+  #list { display: grid; gap: var(--gap); }
+  .finding { border: 1px solid var(--line); border-left-width: 5px; border-radius: var(--radius); background: var(--panel); padding: 8px 12px 9px; }
+  .finding.E3 { border-left-color: var(--e3); }
+  .finding.E2 { border-left-color: var(--e2); }
+  .finding.E1 { border-left-color: var(--e1); }
+  .finding.E4 { border-left-color: var(--e4); }
+  .finding.E0 { border-left-color: var(--e0); background: var(--e0-bg); }
   .finding.E0 .details { display: none; }
   .finding.E0.open .details { display: block; }
-  .badge { display: inline-block; font-weight: 700; font-size: 12px; border-radius: 4px; padding: 1px 8px; color: #fff; }
-  .E3 .badge { background: #d21f1f; }
-  .E2 .badge { background: #e67e00; }
-  .E1 .badge { background: #a88d00; }
-  .E4 .badge { background: #1e9e44; }
-  .E0 .badge { background: #999; }
-  .meta { font-size: 13px; color: #444; }
-  .actions { margin-top: 8px; display: flex; gap: 8px; align-items: center; }
-  button { padding: 5px 12px; border-radius: 6px; border: 1px solid #bbb; cursor: pointer; background: #fff; min-height: 44px; min-width: 44px; }
-  button:hover:not(:disabled) { background: #eef1f4; border-color: #888; }
+  .finding .title { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; font-size: 13.5px; }
+  .finding .title .rule { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  .badge { display: inline-block; font-weight: 700; font-size: 11px; border-radius: 4px; padding: 1px 7px; color: #fff; flex: none; }
+  .E3 .badge { background: var(--e3); }
+  .E2 .badge { background: var(--e2); }
+  .E1 .badge { background: #8a6d00; } /* abgedunkelt: Kontrast auf Weiss */
+  .E4 .badge { background: var(--e4); }
+  .E0 .badge { background: var(--e0); }
+  .cwe { font-size: 11px; font-weight: 700; border: 1px solid currentColor; border-radius: 4px; padding: 0 6px; }
+  .E3 .cwe { color: var(--e3); } .E2 .cwe { color: var(--e2); } .E1 .cwe { color: #8a6d00; }
+  .E4 .cwe { color: var(--e4); } .E0 .cwe { color: var(--e0); }
+  .meta { font-size: 12px; color: var(--muted); font-family: var(--mono); margin-top: 2px; }
+  .msg { font-size: 13px; margin: 6px 0 0; }
+  .actions { margin-top: 7px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  button { padding: 5px 12px; border-radius: 6px; border: 1px solid #bbb; cursor: pointer; background: #fff; min-height: 36px; min-width: 44px; font-size: 13px; }
+  button:hover:not(:disabled) { background: #eceff2; border-color: #888; }
   button:disabled { opacity: .45; cursor: not-allowed; }
-  button:focus-visible { outline: 3px solid #1a73e8; outline-offset: 2px; }
-  button.danger-arm { background: #d21f1f; color: #fff; border-color: #d21f1f; font-weight: 700; }
-  .finding.E0 > button[data-act="toggle"] { margin-top: 6px; }
-  #empty { display: none; padding: 24px; text-align: center; color: #555; border: 1px dashed #bbb; border-radius: 8px; background: #fff; }
+  :is(button, select, input, a, [tabindex]):focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
+  button.danger-arm { background: var(--e3); color: #fff; border-color: var(--e3); font-weight: 700; }
+  .finding.E0 > button[data-act="toggle"] { margin-top: 6px; min-height: 32px; font-size: 12px; }
+  .empty-state { display: none; padding: 28px 20px; text-align: center; color: var(--muted); border: 1px dashed #b5b5b0; border-radius: var(--radius); background: var(--panel); }
+  .empty-state.show { display: block; }
+  .empty-state b { display: block; font-size: 14px; color: var(--ink); margin-bottom: 4px; }
+  .empty-state p { font-size: 12.5px; margin: 0 0 10px; }
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
-  .deny-note { font-size: 12px; color: #a00; }
-  .filters { display: flex; gap: 8px; margin: 12px 0; font-size: 14px; align-items: center; }
+  .deny-note { font-size: 12px; color: var(--e3); font-weight: 600; }
+  .opbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 12px; margin: 2px 0 10px; }
+  .opbar label { font-size: 12px; color: var(--muted); display: flex; gap: 6px; align-items: center; }
+  .opbar select { font-size: 13px; padding: 5px 8px; border: 1px solid #bbb; border-radius: 6px; background: #fff; min-height: 32px; }
+  #count { font-size: 12px; color: var(--muted); margin-left: auto; font-variant-numeric: tabular-nums; }
   #graph { background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 12px 14px; margin: 12px 0; }
   #graph h2 { font-size: 14px; margin: 0 0 8px; }
-  .card { background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 12px 14px; margin: 12px 0; }
-  .card h2 { font-size: 14px; margin: 0 0 8px; }
-  .bar { display: flex; align-items: center; gap: 8px; font-size: 13px; margin: 4px 0; }
-  .bar .lbl { width: 28px; font-weight: 700; }
-  .bar .track { flex: 1; background: #eee; border-radius: 4px; height: 14px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; margin: 0 0 var(--gap); }
+  .card h2 { font-size: 13px; margin: 0 0 4px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+  .card .hint { font-size: 12px; color: var(--faint); margin: 0 0 8px; }
+  .graph-grid { display: grid; grid-template-columns: 150px 1fr; gap: 16px; align-items: center; }
+  @media (max-width: 640px) { .graph-grid { grid-template-columns: 1fr; } }
+  .ring { --v: 72; --c: var(--e1); width: 132px; height: 132px; border-radius: 50%; display: grid; place-items: center; margin: 4px auto;
+    background: conic-gradient(var(--c) calc(var(--v) * 1%), #e7e7e3 0); }
+  .ring .inner { width: 96px; height: 96px; border-radius: 50%; background: #fff; display: grid; place-items: center; text-align: center; }
+  .ring .inner b { font-size: 30px; font-variant-numeric: tabular-nums; line-height: 1; }
+  .ring .inner span { font-size: 10px; color: var(--muted); }
+  .legend { font-size: 12px; color: var(--muted); margin-top: 8px; text-align: center; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin: 0 4px 0 10px; }
+  .bar { display: grid; grid-template-columns: 30px 1fr 64px; align-items: center; gap: 8px; font-size: 12.5px; margin: 5px 0; }
+  .bar .lbl { font-weight: 700; font-variant-numeric: tabular-nums; }
+  .bar .num { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
+  .bar .track { background: #ececea; border-radius: 4px; height: 14px; overflow: hidden; }
   .bar .fill { height: 14px; border-radius: 4px; }
-  #src-note { font-size: 12px; color: #666; }
+  .bar.zero .lbl, .bar.zero .num { color: #a0a0a0; }
+  #src-note { font-size: 11px; color: var(--faint); margin: 8px 2px; }
   .diff { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 8px 0; }
+  @media (max-width: 640px) { .diff { grid-template-columns: 1fr; } }
   .diff pre { margin: 0; padding: 8px; border-radius: 6px; font-size: 12px; overflow-x: auto; }
   .diff .old { background: #fdecec; border: 1px solid #f0b6b6; }
   .diff .new { background: #e9f7ee; border: 1px solid #a9d8b8; }
@@ -74,51 +114,61 @@
   .switch input:focus-visible + .track2 { outline: 3px solid #1a73e8; outline-offset: 2px; }
   #audit-log { font-size: 12px; max-height: 220px; overflow-y: auto; border: 1px solid #ddd; border-radius: 6px; padding: 8px; background: #fafafa; }
   #audit-log li { margin: 2px 0; }
-  .health-ring { display: flex; gap: 16px; align-items: center; }
-  .health-ring .score { font-size: 40px; font-weight: 800; }
 </style>
 </head>
 <body>
-<header>
-  <h1>CateHunt — Review</h1>
+<header class="op">
+  <h1>CateHunt <span class="sub">Review-Workbench · Evidence-Gate</span></h1>
   <div id="health" aria-live="polite">Health: …</div>
   <nav class="tabs" role="tablist" aria-label="Ansichten">
-    <button role="tab" aria-selected="true" data-view="review">Review</button>
-    <button role="tab" aria-selected="false" data-view="editor">Editor</button>
-    <button role="tab" aria-selected="false" data-view="graph">Graph</button>
-    <button role="tab" aria-selected="false" data-view="settings">Einstellungen</button>
+    <button role="tab" aria-selected="true" aria-controls="view-review" data-view="review" id="tab-review">Review</button>
+    <button role="tab" aria-selected="false" aria-controls="view-editor" data-view="editor" id="tab-editor" tabindex="-1">Editor</button>
+    <button role="tab" aria-selected="false" aria-controls="view-graph" data-view="graph" id="tab-graph" tabindex="-1">Graph</button>
+    <button role="tab" aria-selected="false" aria-controls="view-settings" data-view="settings" id="tab-settings" tabindex="-1">Einstellungen</button>
   </nav>
 </header>
 <main>
-  <section id="view-review" class="view active" role="tabpanel">
-  <div class="filters">
+  <section id="view-review" class="view active" role="tabpanel" aria-labelledby="tab-review" tabindex="0">
+  <div class="opbar" role="toolbar" aria-label="Filter und Treffer">
     <label>Level <select id="f-level"><option value="">alle</option><option>E3</option><option>E2</option><option>E1</option><option>E4</option><option>E0</option></select></label>
     <label>Kategorie <select id="f-cat"><option value="">alle</option><option>crypto</option><option>auth</option><option>deserialization</option><option>injection</option><option>other</option></select></label>
-    <span id="count"></span>
+    <label><input type="checkbox" id="f-hide-e0"> E0 ausblenden</label>
+    <span id="count" aria-live="polite"></span>
   </div>
   <div id="list"></div>
-  <div id="empty" role="status">Keine Befunde für diesen Filter — Filter zurücksetzen.</div>
+  <div id="empty" class="empty-state" role="status">
+    <b>Keine Befunde für diesen Filter</b>
+    <p id="empty-detail">Passe Level oder Kategorie an — oder setze den Filter zurück.</p>
+    <button id="empty-reset">Filter zurücksetzen</button>
+  </div>
   <p id="src-note"></p>
   </section>
-  <section id="view-editor" class="view" role="tabpanel">
+  <section id="view-editor" class="view" role="tabpanel" aria-labelledby="tab-editor" tabindex="0" hidden>
     <div class="card">
       <h2>Verbesserungs-Vorschläge</h2>
-      <p style="font-size:13px;color:#444">Jeder Vorschlag zeigt den Diff (alt → neu). „Übernehmen“ wirkt erst nach expliziter Bestätigung (2. Klick). Alle Aktionen landen im Audit-Log.</p>
+      <p class="hint">Jeder Vorschlag zeigt den Diff (alt → neu). „Übernehmen“ wirkt erst nach expliziter Bestätigung (2. Klick). Alle Aktionen landen im Audit-Log.</p>
     </div>
     <div id="suggestions"></div>
-  </section>
-  <section id="view-graph" class="view" role="tabpanel">
-    <div class="card">
-      <h2>Graph-Platzhalter — Health &amp; Verteilung</h2>
-      <div class="health-ring">
-        <div class="score" id="g-score">…</div>
-        <div style="font-size:13px">Health-Farbe: <b id="g-label">…</b><br>grün &gt; 85 · gelb 60–85 · rot &lt; 60</div>
-      </div>
-      <div id="bars" style="margin-top:12px"></div>
-      <p style="font-size:12px;color:#666">Platzhalter: echte Call-/Abhängigkeits-Graphen folgen (cate-graph), Farben nach Health-Regel.</p>
+    <div id="empty-editor" class="empty-state" role="status">
+      <b>Keine offenen Vorschläge</b>
+      <p>Nur E0-Befunde ohne Beleg — kein Vorschlag. Oder alle Vorschläge sind entschieden.</p>
     </div>
   </section>
-  <section id="view-settings" class="view" role="tabpanel">
+  <section id="view-graph" class="view" role="tabpanel" aria-labelledby="tab-graph" tabindex="0" hidden>
+    <div class="card">
+      <h2>Health &amp; Evidence-Verteilung</h2>
+      <p class="hint">Ring-Farbe = Health-Regel (grün &gt; 85 · gelb 60–85 · rot &lt; 60). Balken = Befunde je Evidence-Level. Nur E2+ zählt als Bug.</p>
+      <div class="graph-grid">
+        <div>
+          <div class="ring" id="g-ring" role="img" aria-label="Health-Ring"><div class="inner"><div><b id="g-score">…</b><br><span id="g-label">…</span></div></div></div>
+          <div class="legend"><i style="background:#1e7e34"></i>&gt;85<i style="background:#b98a00"></i>60–85<i style="background:#c81e1e"></i>&lt;60</div>
+        </div>
+        <div id="bars"></div>
+      </div>
+      <p class="hint" style="margin:8px 0 0">Platzhalter: echte Call-/Abhängigkeits-Graphen folgen (cate-graph), Farben nach Health-Regel.</p>
+    </div>
+  </section>
+  <section id="view-settings" class="view" role="tabpanel" aria-labelledby="tab-settings" tabindex="0" hidden>
     <div class="card">
       <h2>Einstellungen</h2>
       <div class="setting-row">
@@ -130,13 +180,17 @@
     <div class="card">
       <h2>Audit-Log</h2>
       <ol id="audit-log"></ol>
+      <div id="empty-audit" class="empty-state" role="status" style="margin-top:8px">
+        <b>Audit-Log ist leer</b>
+        <p>Jede Aktion (Übernehmen, Ablehnen, Automatik) wird hier protokolliert.</p>
+      </div>
       <button id="audit-clear">Log leeren</button>
     </div>
   </section>
 </main>
 <script>
 const ORDER = { E3: 0, E2: 1, E1: 2, E4: 3, E0: 4 }; // E3 rot oben, E4 gruen, E0 grau eingeklappt
-const COLORS = { E3: '#d21f1f', E2: '#e67e00', E1: '#a88d00', E4: '#1e9e44', E0: '#999' };
+const COLORS = { E3: '#c81e1e', E2: '#d96c00', E1: '#8a6d00', E4: '#1e7e34', E0: '#6e6e6e' };
 let findings = [], health = null;
 const CATS = ['crypto', 'auth', 'deserialization', 'injection', 'other'];
 // Demo-Vorschlaege je Kategorie (Platzhalter bis Backend suggest_fix liefert).
@@ -185,40 +239,57 @@ async function load() {
     findings = f; health = h;
     document.getElementById('src-note').textContent = 'Datenquelle: fixtures/*.json (Browser-Fallback).';
   }
-  document.getElementById('health').innerHTML =
-    'Health: <b>' + health.score_0_100 + '</b>/100 · E2+-Bugs: <b>' + health.total_e2_plus + '</b>';
-  buildSuggestions();
+  renderHealth(); buildSuggestions();
   render(); renderEditor(); renderGraph(); renderSettings(); renderAudit();
 }
 function buildSuggestions() {
+  // Manuelle Entscheidungen (angewendet/abgelehnt/scharf) über Rebuilds bewahren.
+  const prev = {};
+  for (const s of suggestions) { prev[s.id] = { state: s.state, armed: s.armed }; }
   // Ein Vorschlag pro Finding ab E1 (E0 ohne Beleg -> kein Vorschlag).
   suggestions = findings
     .filter(x => x.evidence !== 'E0')
     .map(x => {
       const d = FIX_DEMO[x.category] || FIX_DEMO.other;
+      const p = prev['S-' + x.id];
       return { id: 'S-' + x.id, findingId: x.id, category: x.category, evidence: x.evidence,
-               old: d.old, neu: d.neu, state: 'offen', armed: false };
+               old: d.old, neu: d.neu,
+               state: (p && p.state !== 'offen' && p.state !== 'auto') ? p.state : 'offen',
+               armed: (p && p.state === 'offen') ? !!p.armed : false };
     });
-  // Automatische Anpassung: genehmigte Kategorien sofort anwenden + Audit.
+  // Automatische Anpassung: nur offene Vorschlaege genehmigter Kategorien anwenden + Audit.
   if (settings.auto) {
     for (const s of suggestions) {
-      if (settings.approved[s.category]) {
+      if (s.state === 'offen' && settings.approved[s.category]) {
         s.state = 'auto';
         logAudit('AUTO-ANGEWENDET ' + s.id + ' (' + s.findingId + ', ' + s.category + ')');
       }
     }
   }
 }
-function healthColor(v) { return v > 85 ? '#1e9e44' : (v >= 60 ? '#d9b400' : '#d21f1f'); }
+function healthColor(v) { return v > 85 ? '#1e7e34' : (v >= 60 ? '#b98a00' : '#c81e1e'); }
 function healthLabel(v) { return v > 85 ? 'grün (gut)' : (v >= 60 ? 'gelb (mittel)' : 'rot (kritisch)'); }
+function renderHealth() {
+  const v = health ? health.score_0_100 : 0;
+  const bugs = health ? health.total_e2_plus : 0;
+  const c = healthColor(v);
+  document.getElementById('health').innerHTML =
+    'Health: <b style="color:' + c + '">' + v + '</b>/100 <span class="pill" style="background:' + c + '">' +
+    healthLabel(v) + '</span> <span style="color:#bbb">· E2+-Bugs: <b>' + bugs + '</b></span>';
+}
 function render() {
   const lv = document.getElementById('f-level').value;
   const cat = document.getElementById('f-cat').value;
+  const hideE0 = document.getElementById('f-hide-e0').checked;
   const items = findings
-    .filter(x => (!lv || x.evidence === lv) && (!cat || x.category === cat))
+    .filter(x => (!lv || x.evidence === lv) && (!cat || x.category === cat) && !(hideE0 && x.evidence === 'E0'))
     .sort((a, b) => (ORDER[a.evidence] - ORDER[b.evidence]) || a.id.localeCompare(b.id));
   document.getElementById('count').textContent = items.length + ' von ' + findings.length + ' Befunden';
-  document.getElementById('empty').style.display = items.length ? 'none' : 'block';
+  const empty = document.getElementById('empty');
+  empty.classList.toggle('show', items.length === 0);
+  document.getElementById('empty-detail').textContent = findings.length
+    ? 'Aktiver Filter: ' + [lv || 'alle Level', cat || 'alle Kategorien'].join(' · ') + ' — ' + items.length + ' Treffer.'
+    : 'Keine Befunde geladen (Backend/Fixtures prüfen).';
   renderGraph();
   const list = document.getElementById('list');
   list.innerHTML = '';
@@ -228,41 +299,51 @@ function render() {
     el.dataset.id = x.id;
     const deny = !!x.deny;
     el.innerHTML =
-      '<div><span class="badge">' + x.evidence + '</span> <b>' + x.id + '</b> · ' + esc(x.rule_id) + ' · ' + esc(x.cwe) + '</div>' +
-      '<div class="meta">' + esc(x.file) + ':' + (x.start_line || '?') + ' · ' + esc(x.category) + (deny ? ' · Deny-List' : '') + '</div>' +
-      '<div class="details"><p>' + esc(x.message) + '</p>' +
+      '<div class="title"><span class="badge">' + x.evidence + '</span> <b>' + esc(x.id) + '</b>' +
+      ' <span class="rule">' + esc(x.rule_id) + '</span> <span class="cwe">' + esc(x.cwe) + '</span>' +
+      (deny ? '<span class="deny-note">Deny-List</span>' : '') + '</div>' +
+      '<div class="meta">' + esc(x.file) + ':' + (x.start_line || '?') + ' · ' + esc(x.category) + '</div>' +
+      '<div class="details"><p class="msg">' + esc(x.message) + '</p>' +
       '<div class="actions">' +
         '<button data-act="confirm">Bestätigen</button>' +
         '<button data-act="escalate">Eskalieren</button>' +
         '<button data-act="suppress"' + (deny ? ' disabled title="Deny-List: Suppress blockiert (Krypto/Auth/Deserialisierung)"' : '') + '>Suppress</button>' +
-        (deny ? '<span class="deny-note">Suppress blockiert: Deny-List (' + esc(x.cwe) + ') — nur Eskalieren.</span>' : '') +
+        (deny ? '<span class="deny-note">Suppress blockiert (' + esc(x.cwe) + ') — nur Eskalieren.</span>' : '') +
       '</div></div>' +
-      (x.evidence === 'E0' ? '<button data-act="toggle">Ein-/Ausklappen (E0 grau)</button>' : '');
+      (x.evidence === 'E0' ? '<button data-act="toggle" aria-expanded="false">Ein-/Ausklappen (E0 grau)</button>' : '');
     list.appendChild(el);
   }
 }
 function renderGraph() {
   const v = health ? health.score_0_100 : 0;
+  const c = healthColor(v);
   const sc = document.getElementById('g-score');
   sc.textContent = v;
-  sc.style.color = healthColor(v);
+  sc.style.color = c;
   document.getElementById('g-label').textContent = healthLabel(v);
+  const ring = document.getElementById('g-ring');
+  ring.style.setProperty('--v', v);
+  ring.style.setProperty('--c', c);
+  ring.setAttribute('aria-label', 'Health ' + v + ' von 100 (' + healthLabel(v) + ')');
   const counts = { E3: 0, E2: 0, E1: 0, E4: 0, E0: 0 };
   for (const x of findings) { if (counts[x.evidence] !== undefined) counts[x.evidence]++; }
   const max = Math.max(1, ...Object.values(counts));
+  const tot = Math.max(1, findings.length);
   const bars = document.getElementById('bars');
   bars.innerHTML = '';
   for (const k of ['E3', 'E2', 'E1', 'E4', 'E0']) {
     const row = document.createElement('div');
-    row.className = 'bar';
+    row.className = 'bar' + (counts[k] === 0 ? ' zero' : '');
     row.innerHTML = '<span class="lbl">' + k + '</span><div class="track"><div class="fill" style="width:' +
-      Math.round(100 * counts[k] / max) + '%;background:' + COLORS[k] + '"></div></div><span>' + counts[k] + '</span>';
+      Math.round(100 * counts[k] / max) + '%;background:' + COLORS[k] + '"></div></div><span class="num">' + counts[k] + ' · ' + Math.round(100 * counts[k] / tot) + '%</span>';
     bars.appendChild(row);
   }
 }
 function renderEditor() {
   const box = document.getElementById('suggestions');
   box.innerHTML = '';
+  const open = suggestions.filter(s => s.state === 'offen');
+  document.getElementById('empty-editor').classList.toggle('show', open.length === 0);
   if (!suggestions.length) { box.innerHTML = '<div class="card">Keine Vorschläge (nur E0-Befunde).</div>'; return; }
   for (const s of suggestions) {
     const el = document.createElement('article');
@@ -299,20 +380,43 @@ function renderAudit() {
     li.textContent = a;
     ol.appendChild(li);
   }
+  document.getElementById('empty-audit').classList.toggle('show', audit.length === 0);
 }
 function esc(s) { return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
-document.querySelectorAll('nav.tabs button').forEach(b => b.addEventListener('click', () => {
-  document.querySelectorAll('nav.tabs button').forEach(x => x.setAttribute('aria-selected', 'false'));
-  b.setAttribute('aria-selected', 'true');
-  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-  document.getElementById('view-' + b.dataset.view).classList.add('active');
-}));
+const tabBtns = Array.from(document.querySelectorAll('nav.tabs button'));
+function selectTab(b, focus) {
+  tabBtns.forEach(x => { x.setAttribute('aria-selected', 'false'); x.tabIndex = -1; });
+  b.setAttribute('aria-selected', 'true'); b.tabIndex = 0;
+  if (focus) b.focus();
+  document.querySelectorAll('.view').forEach(v => { v.classList.remove('active'); v.hidden = true; });
+  const p = document.getElementById('view-' + b.dataset.view);
+  p.classList.add('active'); p.hidden = false;
+}
+tabBtns.forEach((b, i) => {
+  b.addEventListener('click', () => selectTab(b, false));
+  b.addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+      e.preventDefault();
+      selectTab(tabBtns[(i + (e.key === 'ArrowRight' ? 1 : tabBtns.length - 1)) % tabBtns.length], true);
+    }
+  });
+});
 document.getElementById('f-level').addEventListener('change', render);
 document.getElementById('f-cat').addEventListener('change', render);
+document.getElementById('f-hide-e0').addEventListener('change', render);
+document.getElementById('empty-reset').addEventListener('click', () => {
+  document.getElementById('f-level').value = '';
+  document.getElementById('f-cat').value = '';
+  document.getElementById('f-hide-e0').checked = false;
+  render();
+});
 document.getElementById('list').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
   const card = e.target.closest('.finding'); if (!card) return;
-  if (b.dataset.act === 'toggle') card.classList.toggle('open');
+  if (b.dataset.act === 'toggle') {
+    const open = card.classList.toggle('open');
+    b.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
   else if (!b.disabled) b.textContent += ' ✓';
 });
 document.getElementById('suggestions').addEventListener('click', e => {

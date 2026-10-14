@@ -56,9 +56,12 @@ pub fn parse_git_diff_name_status(output: &str) -> Vec<ChangedFile> {
     out
 }
 
-/// Fragt git nach geaenderten Dateien seit `base`:
-/// `git -C <dir> diff --name-status <base>`. Gibt (stdout) zurueck;
-/// bei Fehler (kein Repo, unbekannte Rev) eine Beschreibung.
+/// Fragt git nach committeten Aenderungen seit `base`:
+/// `git -C <dir> diff --name-status <base> HEAD --`. Nur committeter
+/// Scope (base -> HEAD); uncommittete Arbeitsbaum-Aenderungen (staged
+/// oder unstaged) erscheinen bewusst NICHT als M/A/D — sie sind kein
+/// committeter Scope. Gibt (stdout) zurueck; bei Fehler (kein Repo,
+/// unbekannte Rev) eine Beschreibung.
 pub fn changed_files_since(dir: &Path, base: &str) -> Result<Vec<ChangedFile>, String> {
     let out = std::process::Command::new("git")
         .arg("-C")
@@ -66,6 +69,8 @@ pub fn changed_files_since(dir: &Path, base: &str) -> Result<Vec<ChangedFile>, S
         .arg("diff")
         .arg("--name-status")
         .arg(base)
+        .arg("HEAD")
+        .arg("--")
         .output()
         .map_err(|e| format!("git diff failed: {e}"))?;
     if !out.status.success() {
@@ -158,6 +163,70 @@ mod tests {
         let inv = inventory(&dir);
         assert!(!inv.has_cargo_lock);
         assert!(inv.lockfiles.is_empty());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    fn git_repo(tag: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "cate_scope_{tag}_{}_{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let run = |args: &[&str]| {
+            let st = std::process::Command::new("git")
+                .arg("-C")
+                .arg(&dir)
+                .args(args)
+                .status()
+                .expect("git muss vorhanden sein");
+            assert!(st.success(), "git {args:?} schlug fehl");
+        };
+        run(&["init", "-q"]);
+        run(&["config", "user.email", "test@example.invalid"]);
+        run(&["config", "user.name", "cate-test"]);
+        run(&["config", "commit.gpgsign", "false"]);
+        std::fs::write(dir.join("a.rs"), "fn a() {}\n").unwrap();
+        run(&["add", "a.rs"]);
+        run(&["commit", "-qm", "init"]);
+        dir
+    }
+
+    #[test]
+    fn clean_tree_keine_m_meldungen() {
+        let dir = git_repo("clean");
+        let files = changed_files_since(&dir, "HEAD").expect("HEAD-diff muss laufen");
+        assert!(files.is_empty(), "clean tree meldet {files:?}");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn uncommittet_erscheint_nicht_als_m() {
+        let dir = git_repo("dirty");
+        // Uncommittete Aenderung (unstaged) + untracked File: kein committeter Scope.
+        std::fs::write(dir.join("a.rs"), "fn a() { let x = 1; }\n").unwrap();
+        std::fs::write(dir.join("neu.rs"), "fn neu() {}\n").unwrap();
+        let files = changed_files_since(&dir, "HEAD").expect("HEAD-diff muss laufen");
+        assert!(files.is_empty(), "uncommittet meldet {files:?}");
+        // Committete Aenderung seit Vorgaenger-Rev wird dagegen gemeldet.
+        let run2 = |args: &[&str]| {
+            std::process::Command::new("git")
+                .arg("-C")
+                .arg(&dir)
+                .args(args)
+                .status()
+                .unwrap()
+        };
+        assert!(run2(&["add", "a.rs"]).success());
+        let st = run2(&["commit", "-qm", "zweite"]);
+        assert!(st.success());
+        let files = changed_files_since(&dir, "HEAD~1").expect("diff muss laufen");
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0].status, 'M');
+        assert_eq!(files[0].path, "a.rs");
         std::fs::remove_dir_all(&dir).ok();
     }
 }

@@ -42,6 +42,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "cate-mcp"
+version = "0.1.0"
+dependencies = [
+ "cate-core",
+ "cate-graph",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "cate-sarif"
 version = "0.1.0"
 dependencies = [

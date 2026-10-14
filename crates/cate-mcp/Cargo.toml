@@ -1,0 +1,14 @@
+[package]
+name = "cate-mcp"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+cate-core = { path = "../cate-core" }
+cate-graph = { path = "../cate-graph" }
+
+[[bin]]
+name = "cate-mcp"
+path = "src/main.rs"

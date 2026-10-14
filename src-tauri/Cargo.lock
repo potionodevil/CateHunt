@@ -282,6 +282,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "cate-graph"
+version = "0.1.0"
+dependencies = [
+ "cate-core",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "cate-triage"
 version = "0.1.0"
 dependencies = [
@@ -295,6 +304,7 @@ name = "catehunt-review"
 version = "0.1.0"
 dependencies = [
  "cate-core",
+ "cate-graph",
  "cate-triage",
  "serde",
  "serde_json",

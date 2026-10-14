@@ -29,7 +29,7 @@ fn print_help() {
     println!("USAGE:");
     println!("    cate scan --path <dir> [--format json] [--sarif <file>] [--base <rev>]");
     println!("    cate graph --path <dir> [--out <file>]");
-    println!("    cate triage --cache <file> --fingerprint <fp> [--rule-id <id> --cwe <cwe> --action <open|demote|close> --code-hash <h>]");
+    println!("    cate triage --cache <file> --fingerprint <fp> [--rule-id <id> --cwe <cwe> --action <open|demote|close> --code-hash <h>] [--backend auto|ollama|gemini] [--gemini-ok] [--deep off|opencode|claude] [--uncertain]");
     println!("    cate --version | --help");
 }
 
@@ -358,6 +358,13 @@ fn run_triage(raw: &[String]) -> Result<String, String> {
     let mut cwe = String::from("CWE-000");
     let mut action = String::from("open");
     let mut code_hash = String::from("");
+    // Pipeline-Verdrahtung (Runde 3): Backend-Aufloesung ohne Netz-Calls.
+    // --backend auto|ollama|gemini (auto = Gemini nur bei --gemini-ok),
+    // --deep off|opencode|claude (Opt-in Stufe 3), --uncertain (Befund unklar).
+    let mut backend = String::from("auto");
+    let mut gemini_ok = false;
+    let mut deep = String::from("off");
+    let mut uncertain = false;
     let mut i = 0;
     while i < raw.len() {
         match raw[i].as_str() {
@@ -385,6 +392,28 @@ fn run_triage(raw: &[String]) -> Result<String, String> {
                 i += 1;
                 code_hash = raw.get(i).ok_or("--code-hash needs a value")?.clone();
             }
+            "--backend" => {
+                i += 1;
+                backend = raw.get(i).ok_or("--backend needs a value")?.clone();
+                if !["auto", "ollama", "gemini"].contains(&backend.as_str()) {
+                    return Err(format!(
+                        "unknown --backend '{backend}' (auto|ollama|gemini)"
+                    ));
+                }
+            }
+            "--gemini-ok" => {
+                gemini_ok = true;
+            }
+            "--deep" => {
+                i += 1;
+                deep = raw.get(i).ok_or("--deep needs a value")?.clone();
+                if !["off", "opencode", "claude"].contains(&deep.as_str()) {
+                    return Err(format!("unknown --deep '{deep}' (off|opencode|claude)"));
+                }
+            }
+            "--uncertain" => {
+                uncertain = true;
+            }
             other => return Err(format!("unknown flag: {other}")),
         }
         i += 1;
@@ -393,6 +422,27 @@ fn run_triage(raw: &[String]) -> Result<String, String> {
     let fingerprint = fingerprint.ok_or("missing --fingerprint <fp>")?;
     let wanted = cate_triage::parse_action(&action)
         .ok_or(format!("unknown --action '{action}' (open|demote|close)"))?;
+
+    // Pipeline-Plan aufloesen (Fallback-Kette Ollama -> Gemini -> Deep).
+    let gemini_avail = match backend.as_str() {
+        "ollama" => false,
+        "gemini" => true,
+        _ => gemini_ok,
+    };
+    let prefer = if deep == "claude" {
+        cate_triage::deep_engines::Engine::Claude
+    } else {
+        cate_triage::deep_engines::Engine::Opencode
+    };
+    let deny = cate_triage::verdict_cap(&cwe) == cate_triage::MaxAction::DemoteOnly;
+    let plan =
+        cate_triage::pipeline::plan_stages(gemini_avail, deny, uncertain, deep != "off", prefer);
+    let chain: Vec<String> = plan.chain.iter().map(|s| s.to_string()).collect();
+    let pipeline = serde_json::json!({
+        "primary": plan.primary.to_string(),
+        "deep": plan.deep.map(|e| e.to_string()),
+        "chain": chain,
+    });
 
     let cached = cate_triage::load_cache(&cache).map_err(|e| format!("cache load: {e}"))?;
     if let Some(hit) = cate_triage::lookup(&cached, &fingerprint) {
@@ -403,6 +453,7 @@ fn run_triage(raw: &[String]) -> Result<String, String> {
             "action": hit.verdict.action,
             "policy_override": hit.verdict.policy_override,
             "cwe": hit.verdict.cwe,
+            "pipeline": pipeline,
         });
         return serde_json::to_string_pretty(&out).map_err(|e| format!("json: {e}"));
     }
@@ -435,6 +486,7 @@ fn run_triage(raw: &[String]) -> Result<String, String> {
         "policy_override": overridden,
         "fingerprint": fingerprint,
         "action": stored_action,
+        "pipeline": pipeline,
     });
     serde_json::to_string_pretty(&out).map_err(|e| format!("json: {e}"))
 }
