@@ -24,6 +24,7 @@ fn verdict_for(cwe: &str, action: VerdictAction) -> Verdict {
         tokens_in: 0,
         tokens_out: 0,
         policy_override: false,
+        provenance: None,
     }
 }
 

@@ -1,8 +1,23 @@
 # CateHunt v2 — Plan (MVP Phasen 1–3)
 
 > Evidence Gate für KI-generierten Code. Lokales Desktop-Tool, local-first.
-> Sprache: Deutsch. Stand: 2026-10-14. Arbeitsverzeichnis: `E:/CodeCate` (git, Commits bis `a542efa`).
+> Sprache: Deutsch.
+>
+> ## Nachtrag Stand 2026-10-15 (Arbeitsverzeichnis `C:/Users/RS990/Desktop/Projekte/CateHunt`, Branch `main`)
+>
+> Seit 2026-10-14 umgesetzt (Runden 1–5 + 4 Delegations-Runden, uncommittet):
+> - Phase 1: `cate audit --sarif --diff` (Scope+Metriken+SARIF+Deny, `unlocated`-Regel), Golden byte-stabil (CRLF-tolerant), `cargo test` workspace-fein (28 Targets ok), Clippy `-D warnings` + `cargo fmt --check` als CI-Gates, CI testet zusätzlich `src-tauri`.
+> - Phase 2: Ollama/Gemini/Deep-Adapter mit Availability-Probes, `plan_stages_checked`, deterministischem Offline-Fallback (`deterministic_triage`, schliesst nie), Verdict-Cache JSONL + CLI, Deny-Negativtests, Korpus 8 Fälle (CWE-22/78/79/89/94/328/502/798), `testprojekt/`-E2E, `harness/trend.py` (M-5), `docs/AI_BOM.md` (M-4, Provenienz an allen Produktions-Literalen verdrahtet).
+> - Phase 3: Tauri-Commands (list/health/graph + FixFlow suggest/approve/apply/audit mit S-3: Reviewer-Pflicht, 30-Tage-Ablauf, Deny-Suppress-Block), UI rendert Review/Editor/Graph/Settings (Graph als SVG + Tabelle, Health-Farben nach Regel), per Playwright-headless verifiziert (0 Console-Errors).
+> - Phase 5 (MCP): stdio-Server mit `audit_diff` (strikte Params, `head`≠HEAD abgelehnt), `get_graph`, `explain_nesting`, `apply_proposal` (Approval-Gate + Audit), `check_dependencies` (Offline-DB, nie „safe“), `verify_fix` (immer `NO_SANDBOX` — kein Exec ohne Sandbox), `ping`; 33 Contract-Tests.
+> - Security: Path-Jails (CLI/MCP/Tauri), Secrets-Redaction (`redact.rs`), Rev-Validierung (`-`-Prefix/NUL/Whitespace blockiert).
+>
+> Weiter offen (Stand 2026-10-15 spaet, Runde 6): S3-Erstlauf in CI (echter Container-Run nach Push; lokal self-check + dry-run PASS), S-3.1 Health-Schwellen-Rekalibrierung gesamt (Teilweise erledigt: Schwellen-Doku in Tests). Erledigt seit 2026-10-15: Sandbox S1+S2+S4 (StageProfile-System, RedactionOutput, COW/Preview-Capture, TOCTOU-resolve, 23 Tests), M1.5 Registry-Check real (Offline-DB `cate-registry-db` v1, `--registry-db`, deps-Summary im Scan-Report, 8 Fixtures-Tests), ein echter `total_e2_plus` (Evidence >= E2 zaehlt, lib.rs:857), Python-def/Einrückung-Metriken (incl. async, Dedent-Logik), Fingerprint sha256 ✅, Tree-sitter ✅ (Rust+Python, Heuristik-Fallback), MCP `max_depth`-Filter ✅ strikt (1..=32, sonst INVALID_PARAMS), Demo-Seed ✅ (`cate demo [--out <file>]`, byte-stabil), `ui/dist`-Einchecken ✅, `suppress`-Button deutsch ✅, S-2 Adapter-Pinning ✅ (pins.rs + Offline-Probe), S-5 contested ✅ (höherer Verdict + contested:true, nie mittels, deterministisch), L3 Reachability + L4 Chaining ✅ (reach.rs/chain.rs, Kill-Kriterien, 71 Tests in cate-graph).
+>
+> Historischer Stand 2026-10-14 unten unverändert (Arbeitsverzeichnis damals `E:/CodeCate`).
 > REVIEW.md-Nachtrag: 🟡 GELB — M-1 ✅, M-3/M-7 teilweise, M-2/M-4/M-5/M-6/M-8 offen.
+> Update 2026-10-15: M-2 ✅ (Spec + `check_dependencies` live, `verify_fix` Sandbox-gated), M-4 ✅ (Typen + Spec + verdrahtet), M-5 ✅ (`trend.py`), M-8 ✅ (`redact.rs` + Tests), M-7 ✅ (Jails + Rev-Validierung), M-3 teilweise (Scope/Inventar + `audit`-Export da, expliziter Confirm-Schritt fehlt), M-6 weiter Design-only.
+> Update 2026-10-15 nachmittags: M-6 S1+S2 ✅ (`cate-sandbox` + Haertung, Negativ-Tests), S3-Profile + N1–N4-Gate ✅ (`ci/sandbox/`, CI-Workflow neu), S4 ✅ (StageCaps-Trennung, Prompt-Redact-Gate, Dry-Run-Preview); sha256-Fingerprints ✅ (Core + Triage, Format v2); Tree-sitter ✅ (default-an mit Heuristik-Fallback); `audit --scope-out` ✅; UI deutsch ✅. Update 2026-10-15 spaet (Runde 6): S-2 Adapter-Pinning ✅ (`pins.rs`, Offline-Probe, `verifiziere_pins_offline`), Reachability-/Chaining-Engines ✅ (L3 `reach.rs` BFS + Dep-Use-Pfad, L4 `chain.rs` Kill-Kriterien, Goldens byte-stabil), S-5 contested ✅ (`resolve_contested`, hoeherer Verdict, nie still mitteln), S4 erweitert ✅ (Stufen-Matrix, `RedactionOutput`, Dry-Run-Capture, TOCTOU-Resolve), M1.5 Registry-Check real ✅ (Offline-DB `cate-registry-db` v1, Typosquat-DB-Kopplung, `deps_summary`). Offen: S3-Erstlauf in CI, Health-Schwellen-Rekalibrierung gesamt.
 
 ## 0. Ist-Stand vs. Plan (Code-Abgleich 2026-10-14, Commits bis `a542efa`, `cargo test`: 16/16 grün — 3 core + 2 deps + 1 sarif + 10 triage)
 

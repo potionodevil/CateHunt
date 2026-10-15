@@ -1,0 +1,51 @@
+{
+  "_comment": "S3 seccomp-Profil: Default-Deny (SCMP_ACT_ERRNO). Abgeleitet aus dem Docker-Default-Profil (moby/moby), reduziert auf das, was /bin/sh + coreutils + curl brauchen. Explizit VERWEIGERT (fehlen in der Allowlist): mount/umount2/pivot_root, ptrace, unshare/setns/chroot, kexec/module-ops, reboot, bpf, perf_event_open, userfaultfd, clock_settime/settimeofday, sethostname. STATUS: Review-Profil — gate.sh validiert JSON-Syntax; der Smoke-Run in CI (N1-N4) beweist, dass der Container damit startet. Vor Prod-Einsatz gegen Daemon testen.",
+  "defaultAction": "SCMP_ACT_ERRNO",
+  "architectures": ["SCMP_ARCH_X86_64", "SCMP_ARCH_AARCH64"],
+  "syscalls": [
+    {
+      "names": [
+        "read", "write", "open", "openat", "openat2", "close", "close_range",
+        "stat", "fstat", "lstat", "newfstatat", "statx",
+        "lseek", "pread64", "pwrite64", "readv", "writev",
+        "poll", "ppoll", "select", "pselect6", "epoll_create", "epoll_create1",
+        "epoll_ctl", "epoll_pwait", "epoll_wait",
+        "pipe", "pipe2", "dup", "dup2", "dup3", "fcntl",
+        "mmap", "mprotect", "munmap", "brk", "mremap", "madvise", "msync",
+        "access", "faccessat", "faccessat2",
+        "execve", "exit", "exit_group", "wait4", "waitid",
+        "clone", "clone3", "fork", "vfork",
+        "uname", "getpid", "getppid", "getuid", "geteuid", "getgid", "getegid",
+        "gettid", "getcwd", "chdir", "getdents64",
+        "mkdir", "mkdirat", "rmdir", "unlink", "unlinkat", "rename", "renameat",
+        "renameat2", "link", "linkat", "symlink", "symlinkat", "readlink",
+        "readlinkat", "chmod", "fchmod", "fchmodat", "chown", "fchown",
+        "fchownat", "lchown", "utimensat", "futimens", "truncate", "ftruncate",
+        "fallocate", "fsync", "fdatasync", "sync", "syncfs",
+        "rt_sigaction", "rt_sigprocmask", "rt_sigreturn", "rt_sigpending",
+        "rt_sigtimedwait", "rt_sigqueueinfo", "rt_tgsigqueueinfo",
+        "sigaltstack", "signalfd", "signalfd4",
+        "ioctl", "fcntl64", "flock",
+        "nanosleep", "clock_gettime", "clock_nanosleep", "clock_getres",
+        "gettimeofday", "time",
+        "futex", "set_robust_list", "get_robust_list", "set_tid_address",
+        "getrlimit", "setrlimit", "prlimit64", "getrusage", "sysinfo",
+        "arch_prctl", "set_thread_area",
+        "getrandom", "getpid",
+        "sched_yield", "sched_getaffinity", "sched_setaffinity",
+        "kill", "tkill", "tgkill",
+        "socket", "connect", "bind", "listen", "getsockname", "getpeername",
+        "setsockopt", "getsockopt", "sendto", "recvfrom", "sendmsg", "recvmsg",
+        "sendmmsg", "recvmmsg", "shutdown", "socketpair",
+        "eventfd", "eventfd2", "timerfd_create", "timerfd_settime",
+        "memfd_create", "pipe2",
+        "fstatfs", "statfs", "ustat",
+        "prctl", "capget", "capset",
+        "getgroups", "setgroups", "setgid", "setuid", "setresuid", "setresgid",
+        "umask", "personality",
+        "tee", "splice", "vmsplice"
+      ],
+      "action": "SCMP_ACT_ALLOW"
+    }
+  ]
+}

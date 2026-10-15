@@ -85,6 +85,8 @@ fn health(path: Option<String>) -> Health {
         .map(|f| cate_core::ScoredFinding {
             level: "warning".to_string(),
             evidence: f.evidence.parse().unwrap_or_default(),
+            // M-4 Provenienz: Parent/Tauri-Agent setzt hier den echten Record.
+            provenance: None,
         })
         .collect();
     let hs = cate_core::health_score(&[], &scored, 0);
@@ -94,7 +96,9 @@ fn health(path: Option<String>) -> Health {
     let _ = demo;
     let mut by_level = BTreeMap::new();
     for f in &findings {
-        if f.evidence.parse::<cate_core::EvidenceLevel>().unwrap_or_default()
+        if f.evidence
+            .parse::<cate_core::EvidenceLevel>()
+            .unwrap_or_default()
             >= cate_core::EvidenceLevel::E2
         {
             *by_level.entry(f.evidence.clone()).or_insert(0) += 1;
@@ -114,11 +118,31 @@ fn health(path: Option<String>) -> Health {
 /// und `cate-core`-Health-Scores. Kann der Graph nicht gebaut werden
 /// (kein Verzeichnis/keine .rs-Dateien), bleibt der Fallback:
 /// `{"nodes": [], "edges": [], "fallback": true, "reason": ...}`.
+/// Loest den Graph-Root auf: `path` (falls gesetzt) muss nach
+/// Kanonisierung ein existierendes Verzeichnis sein, sonst Err mit
+/// Begruendung. Ohne `path` gilt das kanonisierte Arbeitsverzeichnis
+/// (muss ebenfalls ein Verzeichnis sein).
+fn resolve_graph_root(path: Option<String>) -> Result<std::path::PathBuf, String> {
+    let raw = path.unwrap_or_else(|| ".".to_string());
+    let canon =
+        std::fs::canonicalize(&raw).map_err(|e| format!("graph root ungueltig ({raw}): {e}"))?;
+    if !canon.is_dir() {
+        return Err(format!(
+            "graph root ist kein Verzeichnis: {}",
+            canon.display()
+        ));
+    }
+    Ok(canon)
+}
+
 #[tauri::command]
 fn graph(path: Option<String>) -> serde_json::Value {
-    let root = path
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")));
+    let root = match resolve_graph_root(path) {
+        Ok(r) => r,
+        Err(e) => {
+            return serde_json::json!({"nodes": [], "edges": [], "fallback": true, "reason": e});
+        }
+    };
     match cate_graph::get_graph(&root) {
         Ok(g) => {
             let mut v = serde_json::to_value(&g).unwrap_or(serde_json::Value::Null);
@@ -148,17 +172,18 @@ fn suggest_fix(
         .suggest(&finding_id, &title, &rationale)
 }
 
-/// User-Approval zu einem Proposal (Begruendung Pflicht).
+/// User-Approval zu einem Proposal (Begruendung + Reviewer Pflicht, S-3).
 #[tauri::command]
 fn approve_fix(
     state: tauri::State<Mutex<fixflow::FixStore>>,
     proposal_id: String,
     rationale: String,
+    reviewer: String,
 ) -> Result<cate_graph::proposal::Proposal, String> {
     state
         .lock()
         .map_err(|e| format!("store poisoned: {e}"))?
-        .approve(&proposal_id, &rationale)
+        .approve_reviewed(&proposal_id, &rationale, &reviewer)
 }
 
 /// Fix anwenden — NUR nach Approval, sonst `APPROVAL_REQUIRED`.
@@ -200,4 +225,46 @@ fn main() {
         ])
         .run(tauri::generate_context!())
         .expect("CateHunt backend failed to start");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn graph_root_nonexistent_ist_err() {
+        let r = resolve_graph_root(Some("gibt-es-nicht-xyz-123".to_string()));
+        assert!(r.is_err(), "nicht-existenter Pfad muss Err sein");
+    }
+
+    #[test]
+    fn graph_root_datei_ist_err() {
+        let f = std::env::temp_dir().join(format!(
+            "cate_graphfile_{}_{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        std::fs::write(&f, "x").unwrap();
+        let r = resolve_graph_root(Some(f.display().to_string()));
+        assert!(r.is_err(), "Datei statt Verzeichnis muss Err sein");
+        std::fs::remove_file(&f).ok();
+    }
+
+    #[test]
+    fn graph_root_verzeichnis_ok() {
+        let r = resolve_graph_root(Some(".".to_string()));
+        assert!(r.is_ok(), "existierendes Verzeichnis muss Ok sein");
+        assert!(r.unwrap().is_absolute(), "Root muss kanonisiert sein");
+    }
+
+    #[test]
+    fn graph_befehl_fallback_bei_ungueltigem_pfad() {
+        let v = graph(Some("gibt-es-nicht-xyz-123".to_string()));
+        assert_eq!(v.get("fallback"), Some(&serde_json::Value::Bool(true)));
+        assert!(v.get("nodes").unwrap().as_array().unwrap().is_empty());
+        assert!(v.get("reason").unwrap().as_str().is_some());
+    }
 }

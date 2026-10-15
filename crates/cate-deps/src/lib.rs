@@ -14,7 +14,7 @@ pub struct Dependency {
     pub evidence: EvidenceLevel,
 }
 
-/// Ergebnis des Registry-Checks (Stub).
+/// Ergebnis des Registry-Checks.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RegistryCheck {
     pub name: String,
@@ -22,6 +22,7 @@ pub struct RegistryCheck {
     pub exists: bool,
     pub age_days: Option<u64>,
     pub downloads: Option<u64>,
+    pub advisory_count: usize,
     pub slopsquat_suspicious: bool,
     pub evidence: EvidenceLevel,
 }
@@ -160,9 +161,11 @@ pub struct OfflineEntry {
     pub exists: bool,
     pub age_days: Option<u64>,
     pub downloads: Option<u64>,
+    pub advisory_count: usize,
 }
 
-/// Offline-Registry-Datenbank: (name, registry) -> Eintrag.
+/// Offline-Registry-Datenbank (M1.5): (name, registry) -> Eintrag,
+/// eben JSON-Format versioniert + Fixture unter tests/fixtures/.
 /// Befuellung aus Snapshot-Datei/Seed; kein Netzwerkzugriff.
 #[derive(Debug, Clone, Default)]
 pub struct OfflineDb {
@@ -190,35 +193,184 @@ impl OfflineDb {
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
+
+    /// Alle bekannten Namen (fuer Typosquat-Heuristik gegen DB-Namen).
+    pub fn known_names(&self) -> Vec<String> {
+        self.entries
+            .keys()
+            .map(|(n, _)| n.clone())
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .collect()
+    }
+}
+
+/// JSON-Dateiformat der Offline-Registry-DB (versioniert):
+/// ```json
+/// {
+///   "format": "cate-registry-db",
+///   "version": 1,
+///   "packages": [
+///     {
+///       "name": "serde",
+///       "registry": "crates.io",
+///       "exists": true,
+///       "age_days": 3200,
+///       "downloads": 300000000,
+///       "advisory_count": 2
+///     }
+///   ]
+/// }
+/// ```
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OfflineRegistryDbFile {
+    pub format: String,
+    pub version: u32,
+    pub packages: Vec<OfflineRegistryDbPackage>,
+}
+
+/// Ein Paket-Eintrag der JSON-Registry-DB.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OfflineRegistryDbPackage {
+    pub name: String,
+    pub registry: String,
+    pub exists: bool,
+    #[serde(default)]
+    pub age_days: Option<u64>,
+    #[serde(default)]
+    pub downloads: Option<u64>,
+    #[serde(default)]
+    pub advisory_count: usize,
+}
+
+pub const REGISTRY_DB_FORMAT: &str = "cate-registry-db";
+pub const REGISTRY_DB_VERSION: u32 = 1;
+
+impl OfflineRegistryDbFile {
+    /// Validiert format/version und baut die In-Memory-DB.
+    pub fn into_db(self) -> Result<OfflineDb, String> {
+        if self.format != REGISTRY_DB_FORMAT {
+            return Err(format!(
+                "format muss '{REGISTRY_DB_FORMAT}' sein (got '{}')",
+                self.format
+            ));
+        }
+        if self.version != REGISTRY_DB_VERSION {
+            return Err(format!(
+                "version {REGISTRY_DB_VERSION} erwartet (got {})",
+                self.version
+            ));
+        }
+        let mut db = OfflineDb::new();
+        for p in &self.packages {
+            db.insert(
+                &p.name,
+                &p.registry,
+                OfflineEntry {
+                    exists: p.exists,
+                    age_days: p.age_days,
+                    downloads: p.downloads,
+                    advisory_count: p.advisory_count,
+                },
+            );
+        }
+        Ok(db)
+    }
+
+    /// Laedt und validiert eine DB-Datei aus JSON-Text (kein Netz).
+    pub fn from_json(json: &str) -> Result<OfflineDb, String> {
+        let v: OfflineRegistryDbFile =
+            serde_json::from_str(json).map_err(|e| format!("registry-db parse: {e}"))?;
+        v.into_db()
+    }
+}
+
+/// Aggregierte Deps-Inspektion fuer `cate scan` (M1.5): nur informativ,
+/// kein Sicherheits-Urteil (wie MCP check_dependencies 'never save').
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DepsSummary {
+    pub packages: usize,
+    pub with_registry_data: usize,
+    pub unknown: usize,
+    pub suspicious: usize,
+    pub oldest_age_days: Option<u64>,
+    pub newest_age_days: Option<u64>,
+    pub total_downloads: u64,
+    pub total_advisories: usize,
+}
+
+/// Deps-Summary aus Dependency-Liste + Registry-Checks.
+pub fn deps_summary(deps: &[Dependency], checks: &[RegistryCheck]) -> DepsSummary {
+    let with_registry_data = checks
+        .iter()
+        .filter(|c| c.age_days.is_some() || c.downloads.is_some())
+        .count();
+    let unknown = checks.iter().filter(|c| !c.exists).count();
+    let suspicious = checks.iter().filter(|c| c.slopsquat_suspicious).count();
+    let ages: Vec<u64> = checks.iter().filter_map(|c| c.age_days).collect();
+    let total_downloads = checks.iter().filter_map(|c| c.downloads).sum();
+    let total_advisories = checks.iter().map(|c| c.advisory_count).sum();
+    DepsSummary {
+        packages: deps.len(),
+        with_registry_data,
+        unknown,
+        suspicious,
+        oldest_age_days: ages.iter().max().copied(),
+        newest_age_days: ages.iter().min().copied(),
+        total_downloads,
+        total_advisories,
+    }
 }
 
 /// Registry-Check gegen Offline-DB (kein Netz):
-/// - Treffer: exists/age_days/downloads aus der DB; verdaechtig nur bei
-///   heuristischem Typosquat-Muster oder fehlender Existenz.
+/// - Treffer: exists/age_days/downloads/advisory_count aus der DB;
+///   verdaechtig nur bei heuristischem Typosquat-Muster oder fehlender
+///   Existenz.
 /// - Fehltritt (mit DB): exists=false, keine Alter/Downloads, verdaechtig.
-/// - Ohne DB (None): altes Stub-Verhalten (exists=true, keine Felder).
+/// - Ohne DB (None): Legacy-Stub-Verhalten (exists=true, keine Felder);
+///   die CLI erzeugt ohne DB keine Checks mehr (M1.5 'real statt Stub').
+///
+/// Registries aus Lockfiles tragen volle URLs:
+/// `"registry+https://…/crates.io-index"` bzw. `"npm+https://registry.npmjs.org/…"`.
+/// Die DB keyed auf kurze Namen (`crates.io` / `npm`), daher kanonisiert
+/// `registry_key` zuerst.
+fn registry_key(registry: &str) -> String {
+    let r = registry.to_lowercase();
+    if r.contains("crates.io") {
+        "crates.io".to_string()
+    } else if r.contains("npm") {
+        "npm".to_string()
+    } else {
+        registry.to_string()
+    }
+}
+
 pub fn registry_check_offline(dep: &Dependency, db: Option<&OfflineDb>) -> RegistryCheck {
     let heuristic = dep.version == "0.0.0"
         || dep.name.contains("--")
         || dep.name.len() == 1
-        || looks_like_typosquat(&dep.name);
+        || looks_like_typosquat(&dep.name, db);
     match db {
         None => RegistryCheck {
             name: dep.name.clone(),
             version: dep.version.clone(),
-            exists: true, // Stub: keine Netzpruefung
+            // Legacy-Stub-Pfad (nur noch via registry_check_stub); die CLI
+            // erzeugt ohne DB gar keine Checks mehr.
+            exists: true,
             age_days: None,
             downloads: None,
+            advisory_count: 0,
             slopsquat_suspicious: heuristic,
             evidence: EvidenceLevel::E0,
         },
-        Some(db) => match db.get(&dep.name, &dep.registry) {
+        Some(db) => match db.get(&dep.name, &registry_key(&dep.registry)) {
             Some(e) => RegistryCheck {
                 name: dep.name.clone(),
                 version: dep.version.clone(),
                 exists: e.exists,
                 age_days: e.age_days,
                 downloads: e.downloads,
+                advisory_count: e.advisory_count,
                 slopsquat_suspicious: heuristic || !e.exists,
                 evidence: EvidenceLevel::E0,
             },
@@ -228,6 +380,7 @@ pub fn registry_check_offline(dep: &Dependency, db: Option<&OfflineDb>) -> Regis
                 exists: false,
                 age_days: None,
                 downloads: None,
+                advisory_count: 0,
                 slopsquat_suspicious: true, // unbekannt = verdaechtig
                 evidence: EvidenceLevel::E0,
             },
@@ -235,11 +388,28 @@ pub fn registry_check_offline(dep: &Dependency, db: Option<&OfflineDb>) -> Regis
     }
 }
 
-fn looks_like_typosquat(name: &str) -> bool {
-    // Sehr grobe Heuristik: haeufige Zielpakete mit 1-Zeichen-Abweichung.
+/// Oeffentlicher Registry-Check (M1.5): als Alias, damit die CLI
+/// die echte Pruefung benutzen kann statt dem Stub.
+pub fn registry_check(dep: &Dependency, db: Option<&OfflineDb>) -> RegistryCheck {
+    registry_check_offline(dep, db)
+}
+
+fn looks_like_typosquat(name: &str, extra_known: Option<&OfflineDb>) -> bool {
+    // Sehr grobe Heuristik: haeufige Zielpakete + Namen aus der Offline-DB
+    // (M1.5: Registry-Typosquat via 1-Zeichen-Distanz von bekannten Namen).
     const POPULAR: &[&str] = &["lodash", "axios", "serde", "tokio", "react", "express"];
     let n = name.to_lowercase();
-    POPULAR.iter().any(|p| edit_distance_one(&n, p))
+    if POPULAR.iter().any(|p| edit_distance_one(&n, p)) {
+        return true;
+    }
+    if let Some(db) = extra_known {
+        for known in db.known_names() {
+            if edit_distance_one(&n, &known.to_lowercase()) {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 fn edit_distance_one(a: &str, b: &str) -> bool {
@@ -314,12 +484,14 @@ mod tests {
                 exists: true,
                 age_days: Some(900),
                 downloads: Some(50_000_000),
+                advisory_count: 2,
             },
         );
         let c = registry_check_offline(&dep, Some(&db));
         assert!(c.exists);
         assert_eq!(c.age_days, Some(900));
         assert_eq!(c.downloads, Some(50_000_000));
+        assert_eq!(c.advisory_count, 2);
         assert!(!c.slopsquat_suspicious);
     }
 

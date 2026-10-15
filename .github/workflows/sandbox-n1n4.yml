@@ -1,0 +1,37 @@
+# S3 Container-Gate N1–N4 (ergaenzt `harness.yml`, baut nichts um).
+name: sandbox-n1n4
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "ci/sandbox/**"
+      - "docs/SANDBOX_DESIGN.md"
+      - "docs/SANDBOX_AUSBAU.md"
+      - ".github/workflows/sandbox-n1n4.yml"
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  n1n4-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Syntax + Profil-Checks (immer, ohne Daemon)
+        run: |
+          bash ci/sandbox/gate.sh --self-check
+          bash ci/sandbox/gate.sh --dry-run
+
+      - name: runsc-Installation versuchen (optional, tolerant)
+        run: |
+          if ! docker info --format '{{json .Runtimes}}' | grep -q runsc; then
+            echo "::warning::keine runsc-Runtime — runc-Fallback (Gate ok, kein Prod)"
+          fi
+
+      - name: N1–N4-Gate (Linux + Docker; SKIP nur dokumentiert, nie still)
+        run: bash ci/sandbox/gate.sh

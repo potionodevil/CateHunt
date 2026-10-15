@@ -112,6 +112,48 @@ pub fn stage1_scan(path: &str, source: &str, th: &Stage1Thresholds) -> Stage1Out
     stage1_route(&m, imports, th)
 }
 
+/// Architektur-Keywords fuer `signals_from_source` (kleingeschrieben, Substring).
+const ARCH_KEYWORDS: &[&str] = &[
+    "auth",
+    "password",
+    "passwd",
+    "secret",
+    "token",
+    "crypto",
+    "cipher",
+    "pickle",
+    "deserial",
+    "subprocess",
+    "socket",
+    "sql",
+    "http",
+    "eval",
+    "exec(",
+    "shell",
+];
+
+/// Leitet Eskalations-Signale deterministisch aus Source + CWE ab
+/// (kein Netz, kein Modell — Offline-Pfad und Test-Fixtures).
+/// - `architecture_hint`: Deny-CWE (Krypto/Auth/Deserialisierung) oder
+///   Architektur-Keyword im Code (Auth-, Krypto-, Prozess-, Netz-Bezug).
+/// - `complexity_hint`: eine Stufe-1-Schwelle (Default) ist ueberschritten
+///   (Nesting, Funktionslaenge oder Import-Anzahl).
+pub fn signals_from_source(source: &str, cwe: &str) -> EscalationSignals {
+    let deny = cate_triage::verdict_cap(cwe) == cate_triage::MaxAction::DemoteOnly;
+    let lower = source.to_ascii_lowercase();
+    let architecture_hint = deny || ARCH_KEYWORDS.iter().any(|k| lower.contains(k));
+    let th = Stage1Thresholds::default();
+    let m = cate_core::analyze_file("signals.rs", source);
+    let max_fn_len = m.functions.iter().map(|f| f.length).max().unwrap_or(0);
+    let complexity_hint = m.max_nesting_depth > th.max_nesting
+        || max_fn_len > th.max_function_length
+        || count_imports(source) > th.max_imports;
+    EscalationSignals {
+        architecture_hint,
+        complexity_hint,
+    }
+}
+
 // ---- Stufe 2 -> 3: Eskalationsregeln ----
 
 /// Signale des kleinen Modells / der Heuristik fuer eine Eskalation nach Stufe 3.
@@ -491,5 +533,35 @@ mod tests {
         assert!(ConfigDeepAudit::new(true, "https://example.com").is_err());
         assert!(ConfigDeepAudit::new(true, "http://192.168.1.1:11434").is_err());
         assert!(check_localhost_only("http://127.0.0.1:11434").is_ok());
+    }
+
+    // --- Signale aus Source (deterministisch, offline) ---
+    #[test]
+    fn signale_eval_und_subprocess_sind_architektur() {
+        let s = signals_from_source("def calc(expr: str):\n    return eval(expr)\n", "CWE-94");
+        assert!(s.architecture_hint, "eval muss Architektur-Hinweis geben");
+        assert!(!s.complexity_hint, "kurze Datei ohne Komplexitaet");
+        let s2 = signals_from_source(
+            "import subprocess\ndef ping(h):\n    return subprocess.run(h, shell=True)\n",
+            "CWE-78",
+        );
+        assert!(s2.architecture_hint);
+    }
+
+    #[test]
+    fn signale_deny_cwe_immer_architektur() {
+        // Auch ohne Keyword: Deny-CWE (z.B. CWE-328) setzt architecture_hint.
+        let s = signals_from_source("x = 1\n", "CWE-328");
+        assert!(s.architecture_hint);
+        let s2 = signals_from_source("x = 1\n", "CWE-79");
+        assert!(!s2.architecture_hint);
+        assert!(!s2.complexity_hint);
+    }
+
+    #[test]
+    fn signale_tiefe_verschachtelung_ist_komplexitaet() {
+        let src = "fn a() {\n if x {\n while y {\n if z {\n }\n }\n }\n}\n";
+        let s = signals_from_source(src, "CWE-79");
+        assert!(s.complexity_hint, "nesting 4 > 3 muss Komplexitaet melden");
     }
 }

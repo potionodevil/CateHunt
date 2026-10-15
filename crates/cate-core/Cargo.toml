@@ -6,3 +6,15 @@ edition = "2021"
 [dependencies]
 serde = { workspace = true }
 serde_json = { workspace = true }
+sha2 = "0.10"
+tree-sitter = { version = "0.27", optional = true }
+tree-sitter-rust = { version = "0.24", optional = true }
+tree-sitter-python = { version = "0.25", optional = true }
+
+[features]
+# tree-sitter ist primaerer Metrik-Pfad (Rust/Python-Grammatiken),
+# Heuristik bleibt immer als Fallback (s. metrics_ts + *_heuristic).
+# Default an: baut offline (Registry-Cache geseedet, C-Toolchain noetig);
+# ohne C-Toolchain/Deps: `--no-default-features` baut rein heuristisch.
+default = ["tree-sitter"]
+tree-sitter = ["dep:tree-sitter", "dep:tree-sitter-rust", "dep:tree-sitter-python"]

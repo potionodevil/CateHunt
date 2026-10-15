@@ -36,12 +36,14 @@ fn findings_golden_byte_stable() {
         std::fs::write(&p, format!("{bytes}\n")).unwrap();
         return;
     }
-    let expected = std::fs::read_to_string(&p).unwrap_or_else(|_| {
+    let expected_raw = std::fs::read_to_string(&p).unwrap_or_else(|_| {
         panic!(
             "Golden fehlt: {} (einmalig UPDATE_GOLDEN=1 setzen)",
             p.display()
         )
     });
+    // CRLF-Toleranz (Windows-Checkout): Golden sind LF-pinning via .gitattributes.
+    let expected = expected_raw.replace("\r\n", "\n");
     assert_eq!(
         expected,
         format!("{bytes}\n"),

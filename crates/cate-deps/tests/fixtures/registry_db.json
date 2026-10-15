@@ -1,0 +1,54 @@
+{
+  "format": "cate-registry-db",
+  "version": 1,
+  "packages": [
+    {
+      "name": "serde",
+      "registry": "crates.io",
+      "exists": true,
+      "age_days": 3200,
+      "downloads": 310000000,
+      "advisory_count": 2
+    },
+    {
+      "name": "tokio",
+      "registry": "crates.io",
+      "exists": true,
+      "age_days": 2600,
+      "downloads": 220000000,
+      "advisory_count": 1
+    },
+    {
+      "name": "request",
+      "registry": "crates.io",
+      "exists": true,
+      "age_days": 4100,
+      "downloads": 45000,
+      "advisory_count": 0
+    },
+    {
+      "name": "requests",
+      "registry": "npm",
+      "exists": true,
+      "age_days": 3500,
+      "downloads": 1200000,
+      "advisory_count": 0
+    },
+    {
+      "name": "left-pad",
+      "registry": "npm",
+      "exists": true,
+      "age_days": 4200,
+      "downloads": 80000000,
+      "advisory_count": 0
+    },
+    {
+      "name": "lodash",
+      "registry": "npm",
+      "exists": true,
+      "age_days": 4400,
+      "downloads": 150000000,
+      "advisory_count": 1
+    }
+  ]
+}

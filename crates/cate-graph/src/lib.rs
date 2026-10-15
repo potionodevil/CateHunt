@@ -11,7 +11,14 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 pub mod proposal;
-pub use proposal::{proposals_to_json, Proposal, ProposalStatus};
+pub use proposal::{proposals_to_json, ApplyPreview, Proposal, ProposalStatus};
+
+pub mod reach;
+pub use reach::{reachability_from_module_params, ReachKind, ReachParams, Reachable};
+pub mod severity;
+pub use severity::{demote_severity, resolve_contested, severity_rank, ContestedSeverity};
+pub mod chain;
+pub use chain::{attack_chains, AttackChain, ChainConfidence};
 
 /// Health-Farbe pro Knoten: gruen > 85, gelb 60–85, rot < 60.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -694,6 +701,43 @@ mod tests {
                 .any(|e| e.from == "cate-core/src/lib" && e.to == "cate-core/tests/golden"),
             "`mod tests;` ohne Datei darf nicht auf tests/ zeigen: {g:?}"
         );
+    }
+
+    #[test]
+    fn module_id_for_path_maps_rs_layout() {
+        assert_eq!(module_id_for_path("foo.rs"), "foo");
+        assert_eq!(module_id_for_path("foo/mod.rs"), "foo");
+        assert_eq!(module_id_for_path("main.rs"), "main");
+        assert_eq!(module_id_for_path("src\\a.rs"), "src/a");
+        assert_eq!(module_id_for_path("mod.rs"), "mod");
+    }
+
+    #[test]
+    fn get_graph_missing_dir_errors() {
+        let missing = std::path::PathBuf::from("gibt-es-nicht-xyz-cate-graph");
+        assert!(get_graph(&missing).is_err());
+    }
+
+    #[test]
+    fn get_graph_reads_directory_end_to_end() {
+        let root = std::env::temp_dir().join(format!(
+            "cate-graph-test-{}-{}",
+            std::process::id(),
+            "dirscan"
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("main.rs"), "mod foo;\nfn main() {}\n").unwrap();
+        std::fs::write(root.join("foo.rs"), "pub fn x() {}\n").unwrap();
+        let g = get_graph(&root).expect("get_graph muss Verzeichnis lesen");
+        let _ = std::fs::remove_dir_all(&root);
+        let mut ids: Vec<&str> = g.nodes.iter().map(|n| n.id.as_str()).collect();
+        ids.sort_unstable();
+        assert_eq!(ids, vec!["foo", "main"]);
+        assert!(g.edges.iter().any(|e| e.from == "main" && e.to == "foo"));
+        for n in &g.nodes {
+            assert_eq!(n.color, health_color(n.health), "Farbe inkonsistent: {n:?}");
+        }
     }
 
     #[test]

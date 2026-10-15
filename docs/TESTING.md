@@ -102,6 +102,12 @@ python harness/harness.py --corpus corpus/manifest.json
 - **Approve → Apply**: genau die bestätigten Findings werden angewendet; Teil-Approval (2 von 5) wendet nur 2 an.
 - **Auto-Apply nur mit Schalter + Log**: Default AUS. Test: ohne Schalter passiert trotz Konfig nichts; mit Schalter schreibt jeder Apply einen Audit-Eintrag (wer/was/wann/diff-Hash). Schalter-Umgehung = FAILED.
 - Rollback-Test: Apply → Undo stellt Original-Bytes wieder her (Hash-identisch).
+- **S-3 Suppress-Gate** (`src-tauri/src/fixflow.rs`): Approval braucht Begründung + Reviewer + Ablaufdatum (Default 30 Tage); abgelaufene Approvals → `APPROVAL_EXPIRED` bei `apply`, Deny-CWE-Suppress → `DENY_SUPPRESS_BLOCKED` (Check gegen `cate-triage::verdict_cap`). UI deaktiviert abgelaufene/Deny-Übernehmen-Buttons mit Begründungstext (`ui/dist/index.html`, Editor-Ansicht). Unit-Beleg: `cargo test --manifest-path src-tauri/Cargo.toml` (u.a. `abgelaufene_approval_blockt_apply_mit_expired`, `deny_cwe_kann_nie_suppressen`).
+
+### 3.4 Trend-Report pro Modell/Engine (M-5)
+- Befehl: `python harness/trend.py --verdicts <verdict-cache.jsonl> [--audit <audit.jsonl>] [--format table|json|both] [--json-out report.json]`
+- Liest Verdict-Cache-JSONL (geflattet ODER `{"verdict": {...}}`, Aliase confirm/suppress/escalate tolerant) + optional Fix-Audit-Logs; Ausgabe: Tabelle pro Modell (Anzahl, Confirm, Suppress, Escalate, Deny-Hochstufungen=`policy_override`) + JSON.
+- Fixtures: `harness/tests/fixtures/trend_verdicts.jsonl` (9 Records, 2 Modelle, 2 Deny-Hochstufungen) + `trend_audit.jsonl` (3 Applies: alice=2, bob=1). Reiner Report, kein Gate.
 
 ## 4. Abdeckungs-Ziele + CI-Verankerung
 

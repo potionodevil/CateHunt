@@ -1,28 +1,37 @@
 {
   "findings": [
     {
+      "cwe": "CWE-000",
       "evidence": "E1",
       "level": "error",
       "message": "avoid eval",
       "path": "src/a.js",
+      "provenance": "semgrep",
       "rule_id": "no-eval",
-      "start_line": 3
+      "start_line": 3,
+      "unlocated": false
     },
     {
+      "cwe": "CWE-000",
       "evidence": "E1",
       "level": "warning",
       "message": "weak hash",
       "path": "src/b.py",
+      "provenance": "semgrep",
       "rule_id": "no-md5",
-      "start_line": 11
+      "start_line": 11,
+      "unlocated": false
     },
     {
+      "cwe": "CWE-000",
       "evidence": "E1",
       "level": "warning",
       "message": "",
       "path": "",
+      "provenance": "semgrep",
       "rule_id": "unknown",
-      "start_line": 0
+      "start_line": 0,
+      "unlocated": true
     }
   ],
   "schema_version": "findings/v1"

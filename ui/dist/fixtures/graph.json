@@ -1,0 +1,260 @@
+{
+  "nodes": [
+    {
+      "id": "cate-cli/src/main",
+      "path": "cate-cli/src/main.rs",
+      "health": 85,
+      "color": "yellow"
+    },
+    {
+      "id": "cate-core/src/lib",
+      "path": "cate-core/src/lib.rs",
+      "health": 90,
+      "color": "green"
+    },
+    {
+      "id": "cate-core/src/redact",
+      "path": "cate-core/src/redact.rs",
+      "health": 93,
+      "color": "green"
+    },
+    {
+      "id": "cate-core/src/scope",
+      "path": "cate-core/src/scope.rs",
+      "health": 96,
+      "color": "green"
+    },
+    {
+      "id": "cate-core/tests/golden",
+      "path": "cate-core/tests/golden.rs",
+      "health": 99,
+      "color": "green"
+    },
+    {
+      "id": "cate-core/tests/vectors_redact_diff",
+      "path": "cate-core/tests/vectors_redact_diff.rs",
+      "health": 96,
+      "color": "green"
+    },
+    {
+      "id": "cate-deps/src/lib",
+      "path": "cate-deps/src/lib.rs",
+      "health": 95,
+      "color": "green"
+    },
+    {
+      "id": "cate-graph/src/lib",
+      "path": "cate-graph/src/lib.rs",
+      "health": 90,
+      "color": "green"
+    },
+    {
+      "id": "cate-graph/src/proposal",
+      "path": "cate-graph/src/proposal.rs",
+      "health": 96,
+      "color": "green"
+    },
+    {
+      "id": "cate-graph/tests/approval_e2e",
+      "path": "cate-graph/tests/approval_e2e.rs",
+      "health": 97,
+      "color": "green"
+    },
+    {
+      "id": "cate-graph/tests/golden",
+      "path": "cate-graph/tests/golden.rs",
+      "health": 99,
+      "color": "green"
+    },
+    {
+      "id": "cate-mcp/src/lib",
+      "path": "cate-mcp/src/lib.rs",
+      "health": 88,
+      "color": "green"
+    },
+    {
+      "id": "cate-mcp/src/main",
+      "path": "cate-mcp/src/main.rs",
+      "health": 94,
+      "color": "green"
+    },
+    {
+      "id": "cate-mcp/tests/contracts",
+      "path": "cate-mcp/tests/contracts.rs",
+      "health": 96,
+      "color": "green"
+    },
+    {
+      "id": "cate-sarif/src/lib",
+      "path": "cate-sarif/src/lib.rs",
+      "health": 95,
+      "color": "green"
+    },
+    {
+      "id": "cate-sarif/tests/golden",
+      "path": "cate-sarif/tests/golden.rs",
+      "health": 99,
+      "color": "green"
+    },
+    {
+      "id": "cate-stages/src/lib",
+      "path": "cate-stages/src/lib.rs",
+      "health": 96,
+      "color": "green"
+    },
+    {
+      "id": "cate-triage/src/deep_engines",
+      "path": "cate-triage/src/deep_engines.rs",
+      "health": 86,
+      "color": "green"
+    },
+    {
+      "id": "cate-triage/src/gemini",
+      "path": "cate-triage/src/gemini.rs",
+      "health": 88,
+      "color": "green"
+    },
+    {
+      "id": "cate-triage/src/lib",
+      "path": "cate-triage/src/lib.rs",
+      "health": 96,
+      "color": "green"
+    },
+    {
+      "id": "cate-triage/src/ollama",
+      "path": "cate-triage/src/ollama.rs",
+      "health": 93,
+      "color": "green"
+    },
+    {
+      "id": "cate-triage/src/pipeline",
+      "path": "cate-triage/src/pipeline.rs",
+      "health": 96,
+      "color": "green"
+    },
+    {
+      "id": "cate-triage/tests/cache_roundtrip",
+      "path": "cate-triage/tests/cache_roundtrip.rs",
+      "health": 98,
+      "color": "green"
+    },
+    {
+      "id": "cate-triage/tests/deny_negative",
+      "path": "cate-triage/tests/deny_negative.rs",
+      "health": 96,
+      "color": "green"
+    },
+    {
+      "id": "cate-triage/tests/e2cap_cache",
+      "path": "cate-triage/tests/e2cap_cache.rs",
+      "health": 96,
+      "color": "green"
+    }
+  ],
+  "edges": [
+    {
+      "from": "cate-cli/src/main",
+      "to": "cate-core/src/lib"
+    },
+    {
+      "from": "cate-core/src/lib",
+      "to": "cate-core/src/redact"
+    },
+    {
+      "from": "cate-core/src/lib",
+      "to": "cate-core/src/scope"
+    },
+    {
+      "from": "cate-core/tests/golden",
+      "to": "cate-core/src/lib"
+    },
+    {
+      "from": "cate-core/tests/vectors_redact_diff",
+      "to": "cate-core/src/lib"
+    },
+    {
+      "from": "cate-core/tests/vectors_redact_diff",
+      "to": "cate-core/src/redact"
+    },
+    {
+      "from": "cate-deps/src/lib",
+      "to": "cate-core/src/lib"
+    },
+    {
+      "from": "cate-graph/src/lib",
+      "to": "cate-core/src/lib"
+    },
+    {
+      "from": "cate-graph/src/lib",
+      "to": "cate-graph/src/proposal"
+    },
+    {
+      "from": "cate-graph/tests/approval_e2e",
+      "to": "cate-graph/src/proposal"
+    },
+    {
+      "from": "cate-graph/tests/golden",
+      "to": "cate-graph/src/lib"
+    },
+    {
+      "from": "cate-mcp/src/lib",
+      "to": "cate-core/src/lib"
+    },
+    {
+      "from": "cate-mcp/src/main",
+      "to": "cate-mcp/src/lib"
+    },
+    {
+      "from": "cate-mcp/tests/contracts",
+      "to": "cate-mcp/src/lib"
+    },
+    {
+      "from": "cate-sarif/src/lib",
+      "to": "cate-core/src/lib"
+    },
+    {
+      "from": "cate-triage/src/deep_engines",
+      "to": "cate-triage/src/ollama"
+    },
+    {
+      "from": "cate-triage/src/gemini",
+      "to": "cate-triage/src/ollama"
+    },
+    {
+      "from": "cate-triage/src/lib",
+      "to": "cate-triage/src/deep_engines"
+    },
+    {
+      "from": "cate-triage/src/lib",
+      "to": "cate-triage/src/gemini"
+    },
+    {
+      "from": "cate-triage/src/lib",
+      "to": "cate-triage/src/ollama"
+    },
+    {
+      "from": "cate-triage/src/lib",
+      "to": "cate-triage/src/pipeline"
+    },
+    {
+      "from": "cate-triage/src/pipeline",
+      "to": "cate-triage/src/deep_engines"
+    },
+    {
+      "from": "cate-triage/src/pipeline",
+      "to": "cate-triage/src/gemini"
+    },
+    {
+      "from": "cate-triage/tests/cache_roundtrip",
+      "to": "cate-triage/src/lib"
+    },
+    {
+      "from": "cate-triage/tests/deny_negative",
+      "to": "cate-triage/src/lib"
+    },
+    {
+      "from": "cate-triage/tests/e2cap_cache",
+      "to": "cate-triage/src/ollama"
+    }
+  ]
+}

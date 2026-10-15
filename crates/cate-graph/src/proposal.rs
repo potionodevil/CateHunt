@@ -136,6 +136,62 @@ pub fn request_apply(
     Ok(())
 }
 
+/// S4 Dry-Run/COW fuer Fix-Anwendung: reiner Datentyp, keine UI-Aenderung.
+///
+/// Regel: `apply` erst nach Preview-Bestaetigung. `preview_apply`
+/// beschreibt den Effekt, ohne zu schreiben (kein Statuswechsel);
+/// `apply_with_preview` schreibt nur mit passender Preview.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ApplyPreview {
+    pub proposal_id: String,
+    pub node_id: String,
+    pub title: String,
+    pub effect: String,
+    pub rationale: String,
+}
+
+impl Proposal {
+    /// Preview-Modus: Effekt beschreiben ohne zu schreiben. Nur aus
+    /// `Approved` moeglich; aendert den Status NICHT (read-only).
+    pub fn preview_apply(&self) -> Result<ApplyPreview, String> {
+        if self.status != ProposalStatus::Approved {
+            return Err(format!(
+                "APPROVAL_REQUIRED: preview nur nach approval moeglich (aktuell {:?})",
+                self.status
+            ));
+        }
+        Ok(ApplyPreview {
+            proposal_id: self.id.clone(),
+            node_id: self.node_id.clone(),
+            title: self.title.clone(),
+            effect: format!(
+                "wuerde Proposal anwenden: finding {}, Titel {} (kein Schreibzugriff im Preview)",
+                self.finding_id, self.title
+            ),
+            rationale: self.rationale.clone(),
+        })
+    }
+
+    /// Apply erst nach Preview-Bestaetigung: die Preview muss zu diesem
+    /// Proposal gehoeren (id-Match) und das Proposal weiterhin
+    /// `Approved` sein. Sonst kein Schreibzugriff.
+    pub fn apply_with_preview(&mut self, preview: &ApplyPreview) -> Result<(), String> {
+        if self.status != ProposalStatus::Approved {
+            return Err(format!(
+                "APPROVAL_REQUIRED: apply nur nach approval moeglich (aktuell {:?}) — read-only default",
+                self.status
+            ));
+        }
+        if preview.proposal_id != self.id {
+            return Err(
+                "preview gehoert zu anderem Proposal (id-Mismatch) — kein Apply".to_string(),
+            );
+        }
+        self.status = ProposalStatus::Applied;
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -199,5 +255,59 @@ mod tests {
         let back: Vec<Proposal> = serde_json::from_str(&v).unwrap();
         assert_eq!(back.len(), 1);
         assert_eq!(back[0].status, ProposalStatus::Proposed);
+    }
+
+    #[test]
+    fn dry_run_preview_aendert_nichts() {
+        let mut p = sample();
+        p.approve("sinnvoll, weil ...").unwrap();
+        let pv = p.preview_apply().unwrap();
+        assert_eq!(pv.proposal_id, "p1");
+        assert_eq!(pv.node_id, "node-a");
+        assert_eq!(p.status, ProposalStatus::Approved);
+    }
+
+    #[test]
+    fn dry_run_preview_braucht_approval() {
+        let p = sample();
+        assert!(p.preview_apply().is_err());
+    }
+
+    #[test]
+    fn dry_run_roundtrip_preview_dann_apply() {
+        let mut p = sample();
+        p.approve("sinnvoll, weil ...").unwrap();
+        let pv = p.preview_apply().unwrap();
+        // Roundtrip ueber JSON (reiner Datentyp).
+        let json = serde_json::to_string(&pv).unwrap();
+        let back: ApplyPreview = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, pv);
+        p.apply_with_preview(&back).unwrap();
+        assert_eq!(p.status, ProposalStatus::Applied);
+    }
+
+    #[test]
+    fn dry_run_fremde_preview_wird_abgelehnt() {
+        let mut p = sample();
+        p.approve("ok").unwrap();
+        let mut pv = p.preview_apply().unwrap();
+        pv.proposal_id = "fremd".to_string();
+        assert!(p.apply_with_preview(&pv).is_err());
+        assert_eq!(p.status, ProposalStatus::Approved);
+    }
+
+    #[test]
+    fn dry_run_apply_ohne_approval_scheitert() {
+        let mut p = sample();
+        // Konstruierte Preview ohne Approval: kein Apply.
+        let pv = ApplyPreview {
+            proposal_id: "p1".to_string(),
+            node_id: "node-a".to_string(),
+            title: "t".to_string(),
+            effect: "e".to_string(),
+            rationale: "r".to_string(),
+        };
+        assert!(p.apply_with_preview(&pv).is_err());
+        assert_eq!(p.status, ProposalStatus::Proposed);
     }
 }

@@ -1,0 +1,3 @@
+{"proposal_id": "p-1", "event": "applied", "actor": "alice", "rationale": "xss-fix sinnvoll"}
+{"proposal_id": "p-2", "event": "applied", "actor": "alice", "rationale": "nesting ok"}
+{"proposal_id": "p-3", "event": "applied", "actor": "bob", "rationale": "injection-fix"}

@@ -1,6 +1,11 @@
 <!DOCTYPE html>
 <!-- Copyright (c) 2026 R.S. - Geistiges Eigentum von R.S. Kopieren, Vervielfaeltigung oder Veraenderung ohne ausdrueckliche Genehmigung nicht erlaubt. -->
-<!-- CateHunt Desktop-Frontend: statisch, offline-faehig. Daten via Tauri-Commands (list_findings/health), Fallback: fixtures/*.json. -->
+<!-- CateHunt Desktop-Frontend: statisch, offline-faehig. Daten via Tauri-Commands (list_findings/health/graph), Fallback: fixtures/*.json. -->
+<!-- KANONISCHE QUELLE: Diese Datei (ui/dist/index.html) ist das Original — es gibt KEINEN Build-Schritt (kein Bundler, kein Transpiler). -->
+<!-- Aenderungsanleitung: (1) Direkt in dieser Datei editieren (UTF-8, deutsche UI-Labels). -->
+<!-- (2) data-act/data-ed-Attribute sind Code-Bezeichner und bleiben Englisch. (3) Nach Aenderung: Datei im Browser -->
+<!-- oder via Tauri laden und per Audit-Log-Gegenprobe testen. (4) Fixtures unter fixtures/*.json spiegeln das -->
+<!-- Backend-Format. (5) Keine Secrets einbetten — statisch, offline, keine Netz-Calls. -->
 <html lang="de">
 <head>
 <meta charset="utf-8">
@@ -73,8 +78,18 @@
   .opbar label { font-size: 12px; color: var(--muted); display: flex; gap: 6px; align-items: center; }
   .opbar select { font-size: 13px; padding: 5px 8px; border: 1px solid #bbb; border-radius: 6px; background: #fff; min-height: 32px; }
   #count { font-size: 12px; color: var(--muted); margin-left: auto; font-variant-numeric: tabular-nums; }
-  #graph { background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 12px 14px; margin: 12px 0; }
-  #graph h2 { font-size: 14px; margin: 0 0 8px; }
+  #src-note, .g-meta { font-size: 11px; color: var(--faint); margin: 8px 2px; }
+  #g-svg { overflow-x: auto; border: 1px solid var(--line); border-radius: 6px; background: #fbfbfa; }
+  #g-svg svg { display: block; }
+  #g-svg svg text { font-family: var(--font); }
+  #g-adj { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 10px; }
+  #g-adj caption { text-align: left; font-size: 12px; color: var(--muted); padding-bottom: 6px; }
+  #g-adj th, #g-adj td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  #g-adj th { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+  #g-adj td.num, #g-adj .num { font-variant-numeric: tabular-nums; }
+  #g-adj code { font-family: var(--mono); font-size: 12px; }
+  .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: baseline; }
+  .g-empty { padding: 18px; text-align: center; color: var(--muted); font-size: 13px; }
   .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; margin: 0 0 var(--gap); }
   .card h2 { font-size: 13px; margin: 0 0 4px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
   .card .hint { font-size: 12px; color: var(--faint); margin: 0 0 8px; }
@@ -93,7 +108,6 @@
   .bar .track { background: #ececea; border-radius: 4px; height: 14px; overflow: hidden; }
   .bar .fill { height: 14px; border-radius: 4px; }
   .bar.zero .lbl, .bar.zero .num { color: #a0a0a0; }
-  #src-note { font-size: 11px; color: var(--faint); margin: 8px 2px; }
   .diff { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 8px 0; }
   @media (max-width: 640px) { .diff { grid-template-columns: 1fr; } }
   .diff pre { margin: 0; padding: 8px; border-radius: 6px; font-size: 12px; overflow-x: auto; }
@@ -146,7 +160,7 @@
   <section id="view-editor" class="view" role="tabpanel" aria-labelledby="tab-editor" tabindex="0" hidden>
     <div class="card">
       <h2>Verbesserungs-Vorschläge</h2>
-      <p class="hint">Jeder Vorschlag zeigt den Diff (alt → neu). „Übernehmen“ wirkt erst nach expliziter Bestätigung (2. Klick). Alle Aktionen landen im Audit-Log.</p>
+      <p class="hint">Jeder Vorschlag zeigt den Diff (alt → neu). „Übernehmen“ wirkt erst nach expliziter Bestätigung (2. Klick). Genehmigungen verfallen nach 30 Tagen; Deny-CWE-Vorschläge (Krypto/Auth/Deserialisierung) sind blockiert. Alle Aktionen landen im Audit-Log.</p>
     </div>
     <div id="suggestions"></div>
     <div id="empty-editor" class="empty-state" role="status">
@@ -165,7 +179,13 @@
         </div>
         <div id="bars"></div>
       </div>
-      <p class="hint" style="margin:8px 0 0">Platzhalter: echte Call-/Abhängigkeits-Graphen folgen (cate-graph), Farben nach Health-Regel.</p>
+    </div>
+    <div class="card">
+      <h2>Modulgraph (use-/mod-Abhängigkeiten)</h2>
+      <p class="hint">Knoten = Modul (Farbe nach Health-Regel), Kante = Abhängigkeit. Reine Übersicht, keine Aktionen.</p>
+      <p class="g-meta" id="g-meta" aria-live="polite">Modulgraph wird geladen …</p>
+      <div id="g-svg" role="img" aria-label="Modulgraph"></div>
+      <table id="g-adj"></table>
     </div>
   </section>
   <section id="view-settings" class="view" role="tabpanel" aria-labelledby="tab-settings" tabindex="0" hidden>
@@ -191,7 +211,7 @@
 <script>
 const ORDER = { E3: 0, E2: 1, E1: 2, E4: 3, E0: 4 }; // E3 rot oben, E4 gruen, E0 grau eingeklappt
 const COLORS = { E3: '#c81e1e', E2: '#d96c00', E1: '#8a6d00', E4: '#1e7e34', E0: '#6e6e6e' };
-let findings = [], health = null;
+let findings = [], health = null, modgraph = { nodes: [], edges: [] }, graphSrc = '';
 const CATS = ['crypto', 'auth', 'deserialization', 'injection', 'other'];
 // Demo-Vorschlaege je Kategorie (Platzhalter bis Backend suggest_fix liefert).
 const FIX_DEMO = {
@@ -219,11 +239,24 @@ function logAudit(text) {
   audit.push(new Date().toISOString() + ' — ' + text);
   saveAudit(); renderAudit();
 }
-async function invoke(cmd) {
+async function invoke(cmd, params) {
   if (window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke) {
-    return await window.__TAURI__.core.invoke(cmd);
+    return await window.__TAURI__.core.invoke(cmd, params || {});
   }
   throw new Error('no-tauri');
+}
+function normGraph(v) {
+  if (!v || typeof v !== 'object') return { nodes: [], edges: [] };
+  if (v.graph && Array.isArray(v.graph.nodes)) return { nodes: v.graph.nodes, edges: v.graph.edges || [] };
+  return { nodes: Array.isArray(v.nodes) ? v.nodes : [], edges: Array.isArray(v.edges) ? v.edges : [] };
+}
+async function loadGraphData() {
+  // Tauri-Command heisst `graph` (Backend: cate-graph::get_graph); `get_graph` als Alias probieren.
+  try { modgraph = normGraph(await invoke('graph')); graphSrc = 'Tauri-Backend (graph)'; return; } catch (e) {}
+  try { modgraph = normGraph(await invoke('get_graph')); graphSrc = 'Tauri-Backend (get_graph)'; return; } catch (e) {}
+  const g = await fetch('fixtures/graph.json').then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); });
+  modgraph = normGraph(g);
+  graphSrc = 'fixtures/graph.json (Browser-Fallback, Snapshot)';
 }
 async function load() {
   try {
@@ -240,12 +273,15 @@ async function load() {
     document.getElementById('src-note').textContent = 'Datenquelle: fixtures/*.json (Browser-Fallback).';
   }
   renderHealth(); buildSuggestions();
-  render(); renderEditor(); renderGraph(); renderSettings(); renderAudit();
+  try { await loadGraphData(); } catch (e) { graphSrc = 'nicht verfügbar (' + e.message + ')'; }
+  render(); renderEditor(); renderGraph(); renderModuleGraph(); renderSettings(); renderAudit();
 }
 function buildSuggestions() {
   // Manuelle Entscheidungen (angewendet/abgelehnt/scharf) über Rebuilds bewahren.
   const prev = {};
-  for (const s of suggestions) { prev[s.id] = { state: s.state, armed: s.armed }; }
+  for (const s of suggestions) { prev[s.id] = { state: s.state, armed: s.armed, expires: s.expires }; }
+  // S-3 Unterdruecken-Gate: jede Genehmigung verfaellt nach 30 Tagen (Default).
+  const APPROVAL_TTL_MS = 30 * 86400 * 1000;
   // Ein Vorschlag pro Finding ab E1 (E0 ohne Beleg -> kein Vorschlag).
   suggestions = findings
     .filter(x => x.evidence !== 'E0')
@@ -253,6 +289,8 @@ function buildSuggestions() {
       const d = FIX_DEMO[x.category] || FIX_DEMO.other;
       const p = prev['S-' + x.id];
       return { id: 'S-' + x.id, findingId: x.id, category: x.category, evidence: x.evidence,
+               cwe: x.cwe || '', deny: !!x.deny,
+               expires: (p && p.expires) ? p.expires : Date.now() + APPROVAL_TTL_MS,
                old: d.old, neu: d.neu,
                state: (p && p.state !== 'offen' && p.state !== 'auto') ? p.state : 'offen',
                armed: (p && p.state === 'offen') ? !!p.armed : false };
@@ -307,8 +345,8 @@ function render() {
       '<div class="actions">' +
         '<button data-act="confirm">Bestätigen</button>' +
         '<button data-act="escalate">Eskalieren</button>' +
-        '<button data-act="suppress"' + (deny ? ' disabled title="Deny-List: Suppress blockiert (Krypto/Auth/Deserialisierung)"' : '') + '>Suppress</button>' +
-        (deny ? '<span class="deny-note">Suppress blockiert (' + esc(x.cwe) + ') — nur Eskalieren.</span>' : '') +
+        '<button data-act="suppress"' + (deny ? ' disabled title="Deny-List: Unterdruecken blockiert (Krypto/Auth/Deserialisierung)"' : '') + '>Unterdruecken</button>' +
+        (deny ? '<span class="deny-note">Unterdruecken blockiert (' + esc(x.cwe) + ') — nur Eskalieren.</span>' : '') +
       '</div></div>' +
       (x.evidence === 'E0' ? '<button data-act="toggle" aria-expanded="false">Ein-/Ausklappen (E0 grau)</button>' : '');
     list.appendChild(el);
@@ -339,6 +377,90 @@ function renderGraph() {
     bars.appendChild(row);
   }
 }
+function gName(v) { return v > 85 ? 'grün' : (v >= 60 ? 'gelb' : 'rot'); }
+function renderModuleGraph() {
+  const meta = document.getElementById('g-meta');
+  const box = document.getElementById('g-svg');
+  const tab = document.getElementById('g-adj');
+  const nodes = (modgraph.nodes || []).slice().sort((a, b) => String(a.id).localeCompare(String(b.id)));
+  const edges = (modgraph.edges || []).filter(e => e && e.from !== e.to);
+  const shownCap = nodes.length > 60 ? ' (SVG zeigt erste 60, Tabelle alle)' : '';
+  meta.textContent = nodes.length + ' Module · ' + edges.length + ' Kanten · Quelle: ' + graphSrc + '.' + shownCap;
+  box.setAttribute('aria-label', 'Modulgraph: ' + nodes.length + ' Module, ' + edges.length + ' Kanten');
+  if (!nodes.length) {
+    box.innerHTML = '<div class="g-empty">Kein Modulgraph verfügbar — keine Module gefunden.</div>';
+    tab.innerHTML = '';
+    return;
+  }
+  const ids = new Set(nodes.map(n => n.id));
+  const incoming = new Map(nodes.map(n => [n.id, 0]));
+  for (const e of edges) { if (ids.has(e.from) && ids.has(e.to)) incoming.set(e.to, (incoming.get(e.to) || 0) + 1); }
+  const out = new Map(nodes.map(n => [n.id, []]));
+  for (const e of edges) { if (out.has(e.from) && ids.has(e.to)) out.get(e.from).push(e.to); }
+  const depth = new Map();
+  const queue = nodes.filter(n => (incoming.get(n.id) || 0) === 0).map(n => n.id);
+  for (const id of queue) depth.set(id, 0);
+  for (let i = 0; i < queue.length; i++) {
+    for (const t of out.get(queue[i]) || []) {
+      if (!depth.has(t)) { depth.set(t, depth.get(queue[i]) + 1); queue.push(t); }
+    }
+  }
+  let maxD = 0;
+  for (const d of depth.values()) maxD = Math.max(maxD, d);
+  for (const n of nodes) if (!depth.has(n.id)) depth.set(n.id, maxD + 1);
+  for (const d of depth.values()) maxD = Math.max(maxD, d);
+  const MAXN = 60;
+  const shown = nodes.slice(0, MAXN);
+  const shownSet = new Set(shown.map(n => n.id));
+  const BW = 176, BH = 46, GAPX = 60, GAPY = 16, PAD = 12;
+  const pos = new Map();
+  const byDepth = new Map();
+  for (const n of nodes) { const d = depth.get(n.id); if (!byDepth.has(d)) byDepth.set(d, []); byDepth.get(d).push(n); }
+  for (const d of [...byDepth.keys()].sort((a, b) => a - b)) {
+    byDepth.get(d).filter(n => shownSet.has(n.id)).forEach((n, i) => {
+      pos.set(n.id, { x: PAD + d * (BW + GAPX), y: PAD + i * (BH + GAPY) });
+    });
+  }
+  let h = BH + 2 * PAD;
+  for (const p of pos.values()) h = Math.max(h, p.y + BH + PAD);
+  const w = PAD + (maxD + 1) * (BW + GAPX);
+  const TINT = { green: '#e9f5ec', yellow: '#fdf3d7', red: '#fdecec' };
+  let s = '<svg width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '" role="img">' +
+    '<defs><marker id="g-arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">' +
+    '<path d="M 0 1 L 9 5 L 0 9 z" fill="#8a8a86"></path></marker></defs>';
+  for (const e of edges) {
+    const a = pos.get(e.from), b = pos.get(e.to);
+    if (!a || !b) continue;
+    s += '<line x1="' + (a.x + BW) + '" y1="' + (a.y + BH / 2) + '" x2="' + (b.x - 3) + '" y2="' + (b.y + BH / 2) +
+      '" stroke="#8a8a86" stroke-width="1.5" marker-end="url(#g-arr)"><title>' + esc(e.from) + ' → ' + esc(e.to) + '</title></line>';
+  }
+  for (const n of shown) {
+    const p = pos.get(n.id);
+    const col = (typeof n.health === 'number') ? gName(n.health) : (n.color || 'gelb');
+    const hex = col === 'grün' ? '#1e7e34' : (col === 'gelb' ? '#b98a00' : '#c81e1e');
+    const tint = col === 'grün' ? TINT.green : (col === 'gelb' ? TINT.yellow : TINT.red);
+    const label = String(n.id).length > 26 ? String(n.id).slice(0, 25) + '…' : String(n.id);
+    s += '<g><title>' + esc(n.id) + ' · Health ' + esc(n.health ?? '–') + ' (' + col + ')</title>' +
+      '<rect x="' + p.x + '" y="' + p.y + '" width="' + BW + '" height="' + BH + '" rx="6" fill="' + tint + '" stroke="' + hex + '" stroke-width="2"></rect>' +
+      '<text x="' + (p.x + 10) + '" y="' + (p.y + 19) + '" font-size="11.5" font-weight="700" fill="#1b1b1b">' + esc(label) + '</text>' +
+      '<text x="' + (p.x + 10) + '" y="' + (p.y + 36) + '" font-size="11" fill="' + hex + '">Health ' + esc(n.health ?? '–') + ' · ' + col + '</text></g>';
+  }
+  s += '</svg>';
+  box.innerHTML = s;
+  const adj = new Map(nodes.map(n => [n.id, []]));
+  for (const e of edges) { if (adj.has(e.from) && ids.has(e.to)) adj.get(e.from).push(e.to); }
+  let rows = '';
+  for (const n of nodes.slice(0, 200)) {
+    const deps = (adj.get(n.id) || []).slice().sort();
+    const col = (typeof n.health === 'number') ? gName(n.health) : (n.color || 'gelb');
+    const hex = col === 'grün' ? '#1e7e34' : (col === 'gelb' ? '#b98a00' : '#c81e1e');
+    rows += '<tr><td><code>' + esc(n.id) + '</code><br><span style="color:var(--faint);font-size:11px">' + esc(n.path || '') + '</span></td>' +
+      '<td class="num"><span class="dot" style="background:' + hex + '"></span>' + esc(n.health ?? '–') + ' (' + col + ')</td>' +
+      '<td>' + (deps.length ? deps.map(d => '<code>' + esc(d) + '</code>').join(', ') : '<span style="color:var(--faint)">—</span>') + '</td></tr>';
+  }
+  tab.innerHTML = '<caption>Adjazenzliste: pro Modul alle direkten Abhängigkeiten.</caption>' +
+    '<thead><tr><th scope="col">Modul</th><th scope="col">Health</th><th scope="col">Hängt ab von</th></tr></thead><tbody>' + rows + '</tbody>';
+}
 function renderEditor() {
   const box = document.getElementById('suggestions');
   box.innerHTML = '';
@@ -353,14 +475,23 @@ function renderEditor() {
     if (s.state === 'angewendet') status = '<span class="status applied">✓ übernommen</span>';
     else if (s.state === 'abgelehnt') status = '<span class="status rejected">✗ abgelehnt</span>';
     else if (s.state === 'auto') status = '<span class="status auto">⚡ automatisch angewendet (Kategorie „' + esc(s.category) + '“ genehmigt)</span>';
+    // S-3: abgelaufene oder Deny-blockierte Vorschlaege nicht uebernehmbar, mit Begruendungstext.
+    const expired = Date.now() > s.expires;
+    const blockedReason = s.deny
+      ? 'Übernehmen blockiert (Deny-CWE ' + esc(s.cwe || '?') + ': Krypto/Auth/Deserialisierung) — kein Unterdruecken, nur Eskalieren. Grund: Deny-List (cate-triage verdict_cap).'
+      : (expired
+        ? 'Genehmigung abgelaufen am ' + new Date(s.expires).toLocaleDateString('de-DE') + ' — erneut anfordern (Default: 30 Tage).'
+        : '');
     el.innerHTML =
       '<div><b>' + s.id + '</b> → ' + esc(s.findingId) + ' · ' + esc(s.category) + ' · ' + esc(s.evidence) + ' ' + status + '</div>' +
       '<div class="diff"><div><h3>Alt</h3><pre class="old">' + esc(s.old) + '</pre></div>' +
       '<div><h3>Neu</h3><pre class="new">' + esc(s.neu) + '</pre></div></div>' +
       (s.state === 'offen'
-        ? '<div class="actions"><button data-ed="apply"' + (s.armed ? ' class="danger-arm"' : '') + '>' +
+        ? '<div class="meta">Ablauf: ' + new Date(s.expires).toLocaleDateString('de-DE') + ' · Reviewer + Begründung erforderlich (S-3)</div>' +
+          '<div class="actions"><button data-ed="apply"' + (s.armed ? ' class="danger-arm"' : '') + (blockedReason ? ' disabled title="' + esc(blockedReason) + '"' : '') + '>' +
           (s.armed ? 'Wirklich übernehmen? Erneut klicken.' : 'Übernehmen') + '</button>' +
-          '<button data-ed="reject">Ablehnen</button></div>'
+          '<button data-ed="reject">Ablehnen</button></div>' +
+          (blockedReason ? '<div><span class="deny-note">' + esc(blockedReason) + '</span></div>' : '')
         : '');
     box.appendChild(el);
   }
@@ -423,6 +554,12 @@ document.getElementById('suggestions').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
   const card = e.target.closest('[data-sid]'); if (!card) return;
   const s = suggestions.find(x => x.id === card.dataset.sid); if (!s || s.state !== 'offen') return;
+  // S-3-Guard (Defense in Depth zum disabled-Button): blockierte Klicks nur auditieren.
+  if (b.dataset.ed === 'apply' && (s.deny || Date.now() > s.expires)) {
+    logAudit('BLOCKIERT ' + s.id + ' (' + (s.deny ? 'Deny-CWE ' + (s.cwe || '?') + ', kein Unterdruecken' : 'Genehmigung abgelaufen') + ')');
+    renderEditor();
+    return;
+  }
   if (b.dataset.ed === 'reject') {
     s.state = 'abgelehnt';
     logAudit('ABGELEHNT ' + s.id + ' (' + s.findingId + ')');

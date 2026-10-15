@@ -92,8 +92,8 @@ function render() {
       '<div class="actions">' +
         '<button data-act="confirm">Bestätigen</button>' +
         '<button data-act="escalate">Eskalieren</button>' +
-        '<button data-act="suppress"' + (deny ? ' disabled title="Deny-List: Suppress blockiert (Krypto/Auth/Deserialisierung)"' : '') + '>Suppress</button>' +
-        (deny ? '<span class="deny-note">Suppress blockiert: Deny-List (' + esc(x.cwe) + ') — nur Eskalieren.</span>' : '') +
+        '<button data-act="suppress"' + (deny ? ' disabled title="Deny-List: Unterdruecken blockiert (Krypto/Auth/Deserialisierung)"' : '') + '>Unterdruecken</button>' +
+        (deny ? '<span class="deny-note">Unterdruecken blockiert: Deny-List (' + esc(x.cwe) + ') — nur Eskalieren.</span>' : '') +
       '</div></div>' +
       (x.evidence === 'E0' ? '<button data-act="toggle">Ein-/Ausklappen (E0 grau)</button>' : '');
     list.appendChild(el);

@@ -8,6 +8,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 cate-core = { path = "../cate-core" }
 cate-graph = { path = "../cate-graph" }
+cate-sandbox = { path = "../cate-sandbox" }
 
 [[bin]]
 name = "cate-mcp"

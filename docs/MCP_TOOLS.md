@@ -1,6 +1,10 @@
 # MCP-Tools: `verify_fix` + `check_dependencies` + `audit_diff` / `get_graph` / `explain_nesting` / `apply_proposal` (Spec, Paket D + Masterplan-Angleich)
 
-> Status: reine Spezifikation, keine Implementierung (Phase 5).
+> Status: Spezifikation + Umsetzungshinweise. Implementiert in
+> `crates/cate-mcp/`: `audit_diff`, `get_graph`, `explain_nesting`,
+> `apply_proposal` sowie `verify_fix` (sandbox-gated, s. §1) und
+> `check_dependencies` (offline Sample-DB, s. §2). Die Spec-Mapping-Tabellen
+> (§3/§4) bleiben Mapping ohne eigene Implementierung (Phase 5).
 > Referenz-Signaturen: `docs/PLAN.md` §3.
 > Masterplan-MCP-Contracts: `catehunt_audit_diff` (Pfade + Changed-Files → JSON-Issues),
 > `catehunt_get_graph` (Modulbaum + Health), `catehunt_explain_nesting` (Tiefen-Inspektion + Patch).
@@ -24,7 +28,7 @@
 | `INVALID_PARAMS` | Pflichtparameter fehlt / Typ falsch |
 | `INVALID_PATH` | Pfad außerhalb Scan-Root oder nicht existent |
 | `NOT_FOUND` | Finding-ID / Lockfile-Eintrag unbekannt |
-| `NO_SANDBOX` | `verify_fix` ohne verfügbare Sandbox (Phase 4+) |
+| `NO_SANDBOX` | `verify_fix` ohne konfigurierten Sandbox-Runner (Fail-Closed, kein Host-Fallback) |
 | `TIMEOUT` | Re-Test überschreitet Zeitlimit |
 | `INTERNAL` | unerwarteter Fehler, kein Finding-Upgrade |
 
@@ -96,7 +100,20 @@ Beispiel-Antwort (erfolgreich):
 1. Nur Findings mit aktuellem Level **E3** sind zulässig; E0/E1/E2 → Fehler `INVALID_PARAMS` (kein Überspringen der Stufen).
 2. `verified=true` genau dann, wenn der ursprüngliche PoC/Re-Test in der Sandbox **besteht** (Fix belegt); sonst bleibt E3.
 3. `E4` ist terminal für die Review-Workbench (grün/geschlossen); Re-Öffnen nur per neuem Finding.
-4. Ohne Sandbox (Phase < 4) antwortet das Tool `NO_SANDBOX`; es führt **niemals** Tests auf dem Host aus.
+4. Ohne konfigurierten Sandbox-Runner antwortet das Tool `NO_SANDBOX`; es führt **niemals** Tests auf dem Host aus.
+
+> Umsetzungshinweis (Stand 2026-10-15, M-6, `catehunt_verify_fix_with` in
+> `crates/cate-mcp/src/lib.rs`): Params werden spec-konform validiert
+> (`finding_id`/`fix_commit` Pflicht, `timeout_secs` Integer 1..=600 →
+> sonst `INVALID_PARAMS`); danach Evidence-Gate (unbekannt → `NOT_FOUND`,
+> nicht-E3 → `INVALID_PARAMS`, kein Stufen-Ueberspringen); dann Re-Test
+> ueber injizierbaren `RetestRunner` (Prod: `SandboxRetestRunner` auf
+> `cate-sandbox`-Basis, Timeout-Kill/Exit≠0 → nicht bestanden → E3 bleibt;
+> `test_command` wird nie als Shell ausgefuehrt, nur Operator-argv).
+> Ohne Runner IMMER `NO_SANDBOX` (Fail-Closed, kein Host-Fallback).
+> Der stdio-Dispatch (`handle_request`) nutzt den runner-losen Pfad, bis
+> Triage-Evidence-Store + Runner-Konfiguration angebunden sind.
+> Contract-Tests mit Mock-Runner (kein echter Exec im Unit-Test).
 
 ---
 
@@ -138,6 +155,7 @@ Beispiel-Call:
   "properties": {
     "lockfile": { "type": "string" },
     "packages_checked": { "type": "integer", "minimum": 0 },
+    "db_stand": { "type": "string", "description": "Stand-Datum der Offline-DB (YYYY-MM-DD); Alter daraus ableitbar" },
     "advisories": {
       "type": "array",
       "items": {
@@ -168,10 +186,24 @@ Beispiel-Antwort:
 
 ### Advisory-Format / Regeln
 
-1. Quelle ist eine **offline-DB** (z. B. `advisories/*.json`, Stand-Datum im Report); Alter der DB wird im Report vermerkt (`db_age_days`).
-2. Unbekannte Pakete (nicht in DB) ergeben **kein** Advisory (kein False Alarm); sie werden nur in `packages_checked` gezählt.
+1. Quelle ist eine **offline-DB** (z. B. `advisories/*.json`); der DB-Stand
+  wird im Report als `db_stand` (YYYY-MM-DD) vermerkt, das Alter ist daraus
+  ableitbar. [Drift-Korrektur 2026-10-15: die frühere Formulierung
+  „`db_age_days` im Report“ hatte kein Schema-Feld; `db_stand` (optional,
+  `additionalProperties: false` bleibt gewahrt) ersetzt es.]
+2. Unbekannte Pakete (nicht in DB) ergeben **kein** Advisory (kein False Alarm); sie werden nur in `packages_checked` gezählt. Die Antwort enthält bewusst kein Sicherheits-Urteil („safe“/„clean“): unbekannt heißt nur „kein Advisory bekannt“, nie „sicher“.
 3. Typosquat-Hinweise aus `cate-deps` bleiben separat (Heuristik, kein Advisory).
 4. Findings aus Advisories starten als **E1** (Tool-Behauptung, Provenienz `"deps"`); Upgrade nur über Triage-Regeln.
+
+> Umsetzungshinweis (Stand 2026-10-15, `catehunt_check_dependencies` in
+> `crates/cate-mcp/src/lib.rs`, Konstante `ADVISORY_DB_STAND`):
+> Lockfile-Inventar via Dateilesung (`Cargo.lock` als `[[package]]`-Parse
+> ohne TOML-Dependency, `package-lock.json` v7-`packages` + v1-Fallback);
+> `project_path` per Path-Jail; Fehler `INVALID_PARAMS` (lockfile-Wert,
+> kaputtes JSON), `INVALID_PATH` (Escape/nicht existent), `NOT_FOUND`
+> (Lockfile fehlt). Die eingebaute DB enthält nur synthetische
+> `CATE-SAMPLE-*`-Einträge (kollidieren mit keinem realen Paket);
+> `advisories/*.json`-Anbindung ist Phase 5+.
 
 ---
 
@@ -309,6 +341,13 @@ Modulbaum + Health zu Datei/Verzeichnis als JSON (read-only, local-only).
 }
 ```
 
+> `max_depth` ist **strikt** (P2-Rest, Konvention wie `audit_diff`/`head`,
+> 2026-10-15): fehlend → Default 8; vorhanden aber kein Integer 1..=32
+> (String, Float, Bool, `null`, Array, Object, `0`, negativ, `33+`)
+> → `INVALID_PARAMS`. Kein Clamping, kein stilles Ignorieren; `0` als
+> „unbegrenzt"-Codierung wird bewusst nicht akzeptiert (nicht in 1..=32
+> darstellbar), unbegrenzt = `32` oder weglassen.
+
 Beispiel-Call:
 
 ```json
@@ -360,9 +399,8 @@ Beispiel-Call:
     },
     "health": {
       "type": "object",
-      "required": ["total_e2_plus", "score_0_100"],
+      "required": ["score_0_100"],
       "properties": {
-        "total_e2_plus": { "type": "integer", "minimum": 0 },
         "score_0_100": { "type": "integer", "minimum": 0, "maximum": 100 }
       },
       "additionalProperties": false
@@ -375,7 +413,7 @@ Beispiel-Call:
 Beispiel-Antwort:
 
 ```json
-{ "root": "crates/cate-core/src", "nodes": [{ "path": "crates/cate-core/src/lib.rs", "kind": "file" }, { "path": "crates/cate-core/src/lib.rs::nesting_depth", "kind": "function", "metrics": { "function_length": 12, "nesting_depth": 3 } }], "edges": [{ "from": "crates/cate-core/src/lib.rs", "to": "crates/cate-core/src/lib.rs::nesting_depth", "kind": "contains" }], "health": { "total_e2_plus": 0, "score_0_100": 95 } }
+{ "root": "crates/cate-core/src", "nodes": [{ "path": "crates/cate-core/src/lib.rs", "kind": "file" }, { "path": "crates/cate-core/src/lib.rs::nesting_depth", "kind": "function", "metrics": { "function_length": 12, "nesting_depth": 3 } }], "edges": [{ "from": "crates/cate-core/src/lib.rs", "to": "crates/cate-core/src/lib.rs::nesting_depth", "kind": "contains" }], "health": { "score_0_100": 95 } }
 ```
 
 ### Spec-Mapping gegen `cate-graph` (nur Mapping, keine Implementierung)
@@ -384,8 +422,15 @@ Beispiel-Antwort:
 |---|---|
 | Gesamt-Tool | Crate `crates/cate-graph/` ist RED-Stub (nur `red_tests::red_health_color_thresholds`, kein Graph-Typ, keine API) → **keine Implementierung aus Spec ableitbar** |
 | `nodes[].metrics` (function_length, nesting_depth) | künftig via `cate-core`: `scan_functions()` → `FunctionMetric`, `analyze_file()` → `FileMetrics { max_nesting_depth, ... }`, `nesting_depth()` |
-| `health` | künftig via `cate-core::health_score()` / `health_score_stub()` (`HealthScore { total_e2_plus, score_0_100, ... }`, nur E2+ zählt) |
+| `health` | `score_0_100` = Mittel der Modul-Health (leerer Graph → 100). `total_e2_plus` am 2026-10-15 **gestrichen**: `cate-graph` hat keine Evidence-Daten, der Hardcode-0 war ein Fake-Wert. Echte E2+-Zaehlung braucht Triage-Evidence (Phase 5+). |
 | `edges[].kind=calls` | kein Call-Graph-Extraktor im Bestand → Spec-only (Phase 5+) |
+
+> Umsetzungshinweis (Stand 2026-10-15, M-6): `max_depth` (1..=32,
+> Default 8) wird als BFS-Tiefe ab den Wurzeln (Knoten ohne eingehende
+> Kante) auf Knoten UND Kanten angewendet (`apply_max_depth` in
+> `crates/cate-mcp/src/lib.rs`); Kanten nur bei erhaltenen Enden.
+> Parameter strikt validiert (s. Input-Schema-Hinweis oben): kein
+> Integer 1..=32 → `INVALID_PARAMS`, kein Clamping.
 
 Fehler: `INVALID_PATH` (Pfad außerhalb Scan-Root / nicht existent), `INVALID_PARAMS` (Pfad leer).
 
@@ -532,3 +577,7 @@ Beispiel-Fehler (fehlende Genehmigung):
 3. Jede Anwendung (erfolgreich oder abgelehnt) erzeugt einen Audit-Log-Eintrag (append-only): `{ audit_log_id, proposal_id, approved_by|null, applied, at }`; `audit_log_id` wird in der Antwort zurückgegeben.
 4. Unbekannte `proposal_id` → Fehler `NOT_FOUND`; Pfadverstöße im Proposal → `INVALID_PATH`; sonst `INTERNAL` (kein stiller Teil-Apply).
 5. Fehlercode-Tabelle (§ Gemeinsame Regeln) gilt plus `APPROVAL_REQUIRED` nur für dieses Tool.
+
+> Hinweis (Stand 2026-10-15, M-6): `ProposalStore::register_demo` wird nur
+> in Tests genutzt; das Prod-Binary (`crates/cate-mcp/src/main.rs`) seedet
+> keine Demo-Proposals (unbekannte ID → `NOT_FOUND`).

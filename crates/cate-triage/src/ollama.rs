@@ -249,13 +249,15 @@ pub fn decide_with_cache(
         tokens_in: 0,
         tokens_out: 0,
         policy_override: proposal.policy_override,
+        provenance: Some(cate_core::ProvenanceRecord::current_with_model(model)),
     };
     // Doppelte Absicherung: Policy auch auf Record-Ebene (close auf Deny -> demote).
     crate::apply_policy(&mut verdict);
     let record = crate::CacheRecord {
         fingerprint: fp,
         verdict,
-        created_at: "2026-10-14T00:00:00Z".to_string(),
+        created_at: cate_core::utc_now_rfc3339(),
+        format_version: crate::CACHE_FORMAT_VERSION,
     };
     Ok(TriageOutcome {
         cache_hit: false,
@@ -459,8 +461,10 @@ mod tests {
                     tokens_in: 0,
                     tokens_out: 0,
                     policy_override: false,
+                    provenance: None,
                 },
                 created_at: "2026-10-14T00:00:00Z".into(),
+                format_version: crate::CACHE_FORMAT_VERSION,
             },
         );
         // Kaputter Modell-Output duerfte bei Hit nie geparst werden.

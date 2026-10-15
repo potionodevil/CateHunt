@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/cate-core", "crates/cate-cli", "crates/cate-sarif", "crates/cate-deps", "crates/cate-triage", "crates/cate-graph", "crates/cate-stages", "crates/cate-mcp"]
+members = ["crates/cate-core", "crates/cate-cli", "crates/cate-sarif", "crates/cate-deps", "crates/cate-triage", "crates/cate-graph", "crates/cate-stages", "crates/cate-mcp", "crates/cate-sandbox"]
 exclude = ["src-tauri"]
 resolver = "2"
 

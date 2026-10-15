@@ -7,7 +7,8 @@ use std::io::BufRead;
 fn main() {
     let root = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
     let mut store = ProposalStore::new();
-    store.register_demo("nest-2026-001");
+    // Kein Demo-Seed im Prod-Binary (nur Tests nutzen register_demo);
+    // unbekannte proposal_id -> NOT_FOUND, keine Genehmigung -> APPROVAL_REQUIRED.
     let stdin = std::io::stdin();
     for line in stdin.lock().lines() {
         let Ok(line) = line else { break };

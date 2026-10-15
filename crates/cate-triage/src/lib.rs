@@ -9,11 +9,10 @@
 pub mod deep_engines;
 pub mod gemini;
 pub mod ollama;
+pub mod pins;
 pub mod pipeline;
 use serde::{Deserialize, Serialize};
-use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
-use std::hash::{Hash, Hasher};
 use std::io;
 use std::path::Path;
 
@@ -69,6 +68,12 @@ pub fn normalize_cwe(cwe: &str) -> String {
 }
 
 /// ein Triage-Verdict vor Policy-Anwendung.
+///
+/// `provenance` ist die optionale AI-BOM-Herkunft (Spez: docs/AI_BOM.md).
+/// Fehlt das Feld im JSON, wird es per serde-default zu `None`
+/// (abwaertskompatibel, alte Cache-Zeilen bleiben lesbar); `None` wird
+/// beim Serialisieren weggelassen (`skip_serializing_if`), damit
+/// Cache-/Harness-Formate byte-stabil bleiben.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Verdict {
     pub rule_id: String,
@@ -81,6 +86,21 @@ pub struct Verdict {
     pub tokens_in: u32,
     pub tokens_out: u32,
     pub policy_override: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provenance: Option<cate_core::ProvenanceRecord>,
+}
+
+impl Verdict {
+    /// Haengt eine Provenienz an (Builder-Stil, fuer CLI/MCP-Verdrahtung).
+    pub fn with_provenance(mut self, provenance: cate_core::ProvenanceRecord) -> Self {
+        self.provenance = Some(provenance);
+        self
+    }
+
+    /// Haengt eine Provenienz an (mutable Variante).
+    pub fn attach_provenance(&mut self, provenance: cate_core::ProvenanceRecord) {
+        self.provenance = Some(provenance);
+    }
 }
 
 /// wendet die Deny-List an: `close` auf Deny-CWE -> `demote` + Override-Flag.
@@ -97,15 +117,13 @@ pub fn apply_policy(v: &mut Verdict) -> bool {
     false
 }
 
-/// Fingerprint = hex(hash(rule_id | code_hash | cwe-normalisiert)).
-/// Schema: docs/VALIDATION.md 3.1 (dort sha256; hier 64-bit-Stub,
-/// Upgrade auf sha256 vor produktivem Benchmark-Einsatz).
+/// Fingerprint = `sha256(rule_id | code_hash | CWE-normalisiert)` als Hex
+/// (64 Zeichen), delegiert an `cate_core::fingerprint` (Schema
+/// `cate_core::HASH_SCHEME`). CWE wird via `normalize_cwe` auf die Nummer
+/// reduziert (`CWE-328` == `cwe-328`); Werte des alten 64-bit-Stubs
+/// (16 Hex-Zeichen) treffen nie (`is_legacy_hash`).
 pub fn fingerprint(rule_id: &str, code_hash: &str, cwe: &str) -> String {
-    let mut h = DefaultHasher::new();
-    rule_id.hash(&mut h);
-    code_hash.hash(&mut h);
-    normalize_cwe(cwe).hash(&mut h);
-    format!("{:016x}", h.finish())
+    cate_core::fingerprint(rule_id, code_hash, &normalize_cwe(cwe))
 }
 
 /// normalisiert Code vor dem Hash (whitespace/comments collapse),
@@ -125,16 +143,24 @@ pub fn normalize_code(source: &str) -> String {
         .join("\n")
 }
 
-/// Code-Hash ueber normalisierten Code.
+/// Code-Hash ueber normalisierten Code: `sha256(normalize_code(source))`
+/// als Hex (64 Zeichen), delegiert an `cate_core::sha256_hex`.
 pub fn code_hash(source: &str) -> String {
-    let mut h = DefaultHasher::new();
-    normalize_code(source).hash(&mut h);
-    format!("{:016x}", h.finish())
+    cate_core::sha256_hex(&normalize_code(source))
 }
+
+/// Cache-Format-Version der JSONL-Persistenz (`cache.jsonl`).
+/// 1 = Aera der 64-bit-`DefaultHasher`-Hashes (legacy, nie ein Hit);
+/// 2 = sha256 (`cate_core::HASH_SCHEME`). `store_verdict` stempelt neu
+/// geschriebene Zeilen mit dieser Version; `load_cache` verwirft Zeilen
+/// mit anderer Version (alte Caches werden zum Miss, nie zum stillen Hit).
+pub const CACHE_FORMAT_VERSION: u32 = 2;
 
 /// Ein Cache-Eintrag = eine JSONL-Zeile im Verdict-Cache.
 /// Top-Level-Keys `fingerprint` + `action` (geflattet) bleiben
 /// harness-kompatibel (`harness.py` liest genau diese Keys).
+/// `format_version` steuert die Migration: Zeilen ohne Feld (legacy)
+/// parsen per Default zu 0 und werden von `load_cache` verworfen.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CacheRecord {
     pub fingerprint: String,
@@ -142,6 +168,8 @@ pub struct CacheRecord {
     pub verdict: Verdict,
     #[serde(default)]
     pub created_at: String,
+    #[serde(default)]
+    pub format_version: u32,
 }
 
 /// parst Aktions-Aliase aus CLI/Harness-Vokabular:
@@ -156,15 +184,29 @@ pub fn parse_action(s: &str) -> Option<VerdictAction> {
 }
 
 /// Cache-Hit ohne Modell-Call: Nachschlagen per Fingerprint.
+/// Legacy-Anfragen (16-stellige 64-bit-Hashes) oder Records mit Legacy-
+/// Fingerprint / fremder `format_version` sind nie ein Hit, sondern Miss.
 pub fn lookup<'a>(
     cache: &'a HashMap<String, CacheRecord>,
     fingerprint: &str,
 ) -> Option<&'a CacheRecord> {
-    cache.get(fingerprint)
+    if cate_core::is_legacy_hash(fingerprint) {
+        return None;
+    }
+    let rec = cache.get(fingerprint)?;
+    if cate_core::is_legacy_hash(&rec.fingerprint) {
+        return None;
+    }
+    if rec.format_version != CACHE_FORMAT_VERSION {
+        return None;
+    }
+    Some(rec)
 }
 
 /// laedt den JSONL-Cache; fehlende Datei = leerer Cache (kein Fehler).
 /// Leere Zeilen werden uebersprungen, kaputte Zeilen sind Fehler.
+/// Zeilen mit Legacy-Fingerprint oder fremder `format_version` werden
+/// still verworfen (alte Caches = Miss, nie stiller Hit).
 pub fn load_cache(path: &Path) -> io::Result<HashMap<String, CacheRecord>> {
     let mut out = HashMap::new();
     if !path.exists() {
@@ -182,16 +224,24 @@ pub fn load_cache(path: &Path) -> io::Result<HashMap<String, CacheRecord>> {
                 format!("{}:{}: {e}", path.display(), n + 1),
             )
         })?;
+        if cate_core::is_legacy_hash(&rec.fingerprint) {
+            continue;
+        }
+        if rec.format_version != CACHE_FORMAT_VERSION {
+            continue;
+        }
         out.insert(rec.fingerprint.clone(), rec);
     }
     Ok(out)
 }
 
 /// haengt ein Verdict als JSONL-Zeile an; wendet vorher `apply_policy` an
-/// (Deny-CWE: `close`/`suppress` -> `demote`/`escalate` + Override-Flag).
+/// (Deny-CWE: `close`/`suppress` -> `demote`/`escalate` + Override-Flag)
+/// und stempelt `format_version = CACHE_FORMAT_VERSION`.
 /// Rueckgabe: true, wenn die Policy eingegriffen hat.
 pub fn store_verdict(path: &Path, record: &CacheRecord) -> io::Result<bool> {
     let mut rec = record.clone();
+    rec.format_version = CACHE_FORMAT_VERSION;
     let overridden = apply_policy(&mut rec.verdict);
     if let Some(parent) = path.parent() {
         if !parent.as_os_str().is_empty() {
@@ -242,6 +292,7 @@ mod tests {
             tokens_in: 0,
             tokens_out: 0,
             policy_override: false,
+            provenance: None,
         };
         assert!(apply_policy(&mut v));
         assert_eq!(v.action, VerdictAction::Demote);
@@ -262,6 +313,7 @@ mod tests {
             tokens_in: 0,
             tokens_out: 0,
             policy_override: false,
+            provenance: None,
         };
         assert!(!apply_policy(&mut v));
         assert_eq!(v.action, VerdictAction::Close);
@@ -273,6 +325,66 @@ mod tests {
         let b = fingerprint("rule", "hash", "cwe-328");
         assert_eq!(a, b);
         assert_ne!(a, fingerprint("other-rule", "hash", "CWE-328"));
+    }
+
+    #[test]
+    fn sha256_known_vektoren() {
+        // cate_core::sha256_hex("") (RFC-Leervektor).
+        assert_eq!(
+            code_hash(""),
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        );
+        // normalize_code laesst Einzeiler unveraendert: sha256("let x = 1;").
+        assert_eq!(
+            code_hash("let x = 1;"),
+            "aad7378dfeb851703927a534da47d0d02be7f54cf8c1751a37734d515811dafe"
+        );
+        // fingerprint("r","h","CWE-79") = sha256("r|h|79").
+        assert_eq!(
+            fingerprint("r", "h", "CWE-79"),
+            "3ec6beb0f409ec2cf582b45e0761a4de28f624cc82effdc5a5c34d665b778ece"
+        );
+        // 64 Hex-Zeichen, kein Legacy-Format.
+        for v in [code_hash("x"), fingerprint("r", "h", "CWE-79")] {
+            assert_eq!(v.len(), 64);
+            assert!(!cate_core::is_legacy_hash(&v));
+        }
+        // CWE-Schreibweisen (mit/ohne Prefix, Case) landen auf einem Key.
+        assert_eq!(
+            fingerprint("r", "h", "CWE-79"),
+            fingerprint("r", "h", "cwe79")
+        );
+    }
+
+    #[test]
+    fn legacy_lookup_ist_miss_nie_hit() {
+        let legacy_fp = "0123456789abcdef";
+        assert!(cate_core::is_legacy_hash(legacy_fp));
+        let mut cache = HashMap::new();
+        cache.insert(
+            legacy_fp.to_string(),
+            CacheRecord {
+                fingerprint: legacy_fp.into(),
+                verdict: Verdict {
+                    rule_id: "r".into(),
+                    cwe: "CWE-79".into(),
+                    code_hash: legacy_fp.into(),
+                    action: VerdictAction::Close,
+                    severity_after: "high".into(),
+                    model: "test".into(),
+                    prompt_version: "v1".into(),
+                    tokens_in: 0,
+                    tokens_out: 0,
+                    policy_override: false,
+                    provenance: None,
+                },
+                created_at: "2026-10-14T00:00:00Z".into(),
+                format_version: 0,
+            },
+        );
+        assert!(lookup(&cache, legacy_fp).is_none());
+        let neu = fingerprint("r", "h", "CWE-79");
+        assert!(lookup(&cache, &neu).is_none());
     }
 
     #[test]
@@ -303,6 +415,7 @@ mod tests {
                 tokens_in: 0,
                 tokens_out: 0,
                 policy_override: false,
+                provenance: None,
             };
             assert!(apply_policy(&mut v), "policy griff nicht ein bei {cwe}");
             assert_eq!(v.action, VerdictAction::Demote);

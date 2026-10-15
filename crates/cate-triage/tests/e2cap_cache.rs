@@ -111,8 +111,10 @@ fn cache_hit_ohne_modell_call_alle_adapter() {
                 tokens_in: 0,
                 tokens_out: 0,
                 policy_override: false,
+                provenance: None,
             },
             created_at: "2026-10-14T00:00:00Z".into(),
+            format_version: cate_triage::CACHE_FORMAT_VERSION,
         },
     );
     let garbage = "definitiv kein JSON {{{";
@@ -146,8 +148,10 @@ fn runner_wird_bei_hit_nie_aufgerufen() {
                 tokens_in: 0,
                 tokens_out: 0,
                 policy_override: false,
+                provenance: None,
             },
             created_at: "t".into(),
+            format_version: cate_triage::CACHE_FORMAT_VERSION,
         },
     );
     let g = cate_triage::gemini::triage_with_runner(
@@ -195,4 +199,40 @@ fn deny_miss_kappt_und_eskaliert_in_decide() {
     assert_eq!(o.proposal.evidence_proposed, "E2");
     assert_eq!(o.record.verdict.action, cate_triage::VerdictAction::Demote);
     assert!(o.record.verdict.policy_override);
+}
+
+#[test]
+fn legacy_fingerprint_ist_miss_trotz_eintrag() {
+    // 64-bit-Alt-Eintrag direkt in der Map: decide_with_cache darf ihn
+    // nie als Hit werten, sondern muss den Modell-Output parsen (Miss).
+    let legacy_fp = "0123456789abcdef";
+    assert!(cate_core::is_legacy_hash(legacy_fp));
+    let c = ctx("CWE-79", "let x = 1;");
+    let mut cache: HashMap<String, cate_triage::CacheRecord> = HashMap::new();
+    cache.insert(
+        legacy_fp.to_string(),
+        cate_triage::CacheRecord {
+            fingerprint: legacy_fp.into(),
+            verdict: cate_triage::Verdict {
+                rule_id: "semgrep:test.rule".into(),
+                cwe: "CWE-79".into(),
+                code_hash: legacy_fp.into(),
+                action: cate_triage::VerdictAction::Close,
+                severity_after: "medium".into(),
+                model: "alt".into(),
+                prompt_version: "v1".into(),
+                tokens_in: 0,
+                tokens_out: 0,
+                policy_override: false,
+                provenance: None,
+            },
+            created_at: "2026-10-14T00:00:00Z".into(),
+            format_version: 0,
+        },
+    );
+    let ok = proposal("E1", "confirm");
+    let o = decide_with_cache(&cache, &c, &ok, "m-neu").unwrap();
+    assert!(!o.cache_hit, "legacy-eintrag darf nie Hit sein");
+    assert_eq!(o.proposal.verdict, "confirm");
+    assert_eq!(o.record.verdict.model, "m-neu");
 }

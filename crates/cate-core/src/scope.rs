@@ -62,7 +62,11 @@ pub fn parse_git_diff_name_status(output: &str) -> Vec<ChangedFile> {
 /// oder unstaged) erscheinen bewusst NICHT als M/A/D — sie sind kein
 /// committeter Scope. Gibt (stdout) zurueck; bei Fehler (kein Repo,
 /// unbekannte Rev) eine Beschreibung.
+///
+/// `base` wird vorab validiert (leer/Whitespace/NUL/fuehrendes `-`
+/// → Err), damit kein Rev-String als git-Option interpretiert wird.
 pub fn changed_files_since(dir: &Path, base: &str) -> Result<Vec<ChangedFile>, String> {
+    validate_base(base)?;
     let out = std::process::Command::new("git")
         .arg("-C")
         .arg(dir)
@@ -79,6 +83,25 @@ pub fn changed_files_since(dir: &Path, base: &str) -> Result<Vec<ChangedFile>, S
     }
     let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
     Ok(parse_git_diff_name_status(&stdout))
+}
+
+/// Validiert einen git-Base-Rev: leer/nur Whitespace, NUL-Bytes,
+/// eingebettete Whitespaces und fuehrendes `-` werden abgelehnt —
+/// letzteres, damit `base` nie als git-Option interpretiert wird.
+fn validate_base(base: &str) -> Result<(), String> {
+    if base.trim().is_empty() {
+        return Err("base darf nicht leer sein".to_string());
+    }
+    if base.contains('\0') {
+        return Err("base enthaelt ungueltiges NUL-Byte".to_string());
+    }
+    if base.trim_start().starts_with('-') {
+        return Err(format!("base darf nicht mit '-' beginnen: {base}"));
+    }
+    if base.chars().any(|c| c.is_whitespace()) {
+        return Err(format!("base enthaelt ungueltige Whitespaces: {base}"));
+    }
+    Ok(())
 }
 
 /// Lockfile-Bestandsaufnahme im Verzeichnis `dir` (Stufe 0: Existenz).
@@ -193,6 +216,22 @@ mod tests {
         run(&["add", "a.rs"]);
         run(&["commit", "-qm", "init"]);
         dir
+    }
+
+    #[test]
+    fn invalid_base_wird_abgelehnt() {
+        let dir = git_repo("basevalid");
+        for bad in [
+            "", "   ", "\t\n ", "--help", "-n", "HEAD~1 ", "HE AD", "ba\0se",
+        ] {
+            let r = changed_files_since(&dir, bad);
+            assert!(r.is_err(), "base {bad:?} muss Err sein, war {r:?}");
+        }
+        // Gueltige Revs laufen weiter (ggf. Err nur bei unbekannter Rev,
+        // aber nie wegen Validierung — HEAD ist immer ok).
+        assert!(changed_files_since(&dir, "HEAD").is_ok());
+        assert!(changed_files_since(&dir, "HEAD~1").is_err()); // nur 1 Commit -> unbekannte Rev
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]

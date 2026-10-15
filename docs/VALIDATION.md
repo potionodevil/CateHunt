@@ -167,3 +167,50 @@ parallelem Coding-Agent). Nachtrag nach Fertigstellung: Workspace enthaelt
 `cate-triage` (Deny-List + Verdict-Fingerprint, s. Phase-2-Commit).
 Offen bleiben: OWASP-/SastBench-Anbindung (nur Harness-Stub),
 Sandbox-Implementierung, Korpus-Ausbau ueber 2 Faelle hinaus.
+
+## 7. AI-BOM / Provenienz (M-4, Stand 2026-10-15)
+
+Spez: `docs/AI_BOM.md`. Jedes KI-erzeugte Finding (`cate_core::ScoredFinding`)
+und jeder Triage-Verdict (`cate_triage::Verdict`) traegt optional
+`provenance: Option<cate_core::ProvenanceRecord>`
+(`tool_name`, `tool_version` aus `CARGO_PKG_VERSION`, `model`,
+`commit_sha` aus Buildzeit-`CATE_COMMIT_SHA` mit Fallback `"unknown"`,
+UTC-`timestamp`). Regel: **kein Finding ohne Provenienz ab Phase T
+(Triage)** — neu erzeugte Records muessen `provenance` tragen;
+Legacy-Bestaende ohne Feld bleiben per serde-default lesbar (`None`,
+nicht serialisiert). Helper fuer CLI/MCP-Verdrahtung:
+`cate_core::provenance_record()` / `provenance_record_for(..)`.
+
+## 8. Scope-Export (M-3, Stand 2026-10-15)
+
+`cate audit --sarif <file> --diff <base> [--path <dir>] --scope-out <datei>`
+schreibt neben dem Stdout-Report den ermittelten Scope als JSON-Export —
+reproduzierbarer Lauf-Beleg (welcher Stand wurde geprueft?).
+
+Schema (`--scope-out`, Erfolgsfall):
+
+```json
+{
+  "tool": "cate",
+  "version": "0.1.0",
+  "command": "audit",
+  "base": "abc123",
+  "range": "abc123..HEAD",
+  "changed_files": [{ "status": "M", "path": "src/x.rs" }],
+  "inventory": { "lockfiles": ["Cargo.lock"], "has_cargo_lock": true, "has_package_lock": false },
+  "timestamp": "2026-10-15T12:00:00Z",
+  "provenance": { "tool_name": "cate", "tool_version": "0.1.0", "model": "audit", "commit_sha": "…", "timestamp": "…" }
+}
+```
+
+Regeln:
+- `base` ist der Base-Teil von `--diff` (Range-Form `base..HEAD` erlaubt);
+  `range` haelt immer die ausgewertete Form `base..HEAD` fest.
+- Ohne git-Repo (oder unbekannte Rev) kein Abbruch: der Export traegt
+  `error` statt `changed_files`; Inventar/Timestamp/Provenienz stehen trotzdem.
+- Der Stdout-Report bleibt unveraendert (kein Format-Bruch); der Export ist
+  bis auf `timestamp` byte-stabil ueber Wiederholungslaeufe (Test
+  `audit_scope_out_schreibt_export_mit_beleg`).
+- Quelllage: Scope aus `cate_core::scope::changed_files_since`, Inventar aus
+  `cate_core::scope::inventory`, Zeit via `cate_core::utc_now_rfc3339`,
+  Provenienz via `ProvenanceRecord::current_with_model("audit")` (M-4).

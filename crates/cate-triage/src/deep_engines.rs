@@ -527,8 +527,10 @@ mod tests {
                     tokens_in: 0,
                     tokens_out: 0,
                     policy_override: false,
+                    provenance: None,
                 },
                 created_at: "2026-10-14T00:00:00Z".into(),
+                format_version: crate::CACHE_FORMAT_VERSION,
             },
         );
         let cfg = DeepConfig::opencode();
