@@ -6,20 +6,22 @@ Stand: 2026-10-14. Arbeitsverzeichnis: `E:/CodeCate`.
 Kaskade: **Algorithmus (deterministisch) → AI klein (Ollama/Gemini CLI) → AI gross (headless Agents) → Mensch (UI-Approval)**.
 Prinzip: Jede Stufe wird isoliert getestet; Eskalation nur bei Unsicherheit; Deny schlägt alles.
 
-## 0. Ist-Stand (gemessen 2026-10-14)
+## 0. Ist-Stand (gemessen 2026-10-17)
 
 | Bereich | Befund |
 |---|---|
-| Unit-Tests (gezählt via `#[test]`/`#[tokio::test]`) | 81 Fundstellen: cate-core (lib 7, scope 5, redact 11), cate-deps 5, cate-sarif 1, cate-graph 11, cate-triage (lib 10, ollama 10, gemini 15), cate-cli 4, + `cate-triage/tests/cache_roundtrip.rs` 2 |
-| `cargo test` Ergebnis | **94 passed / 0 failed** für `-p cate-core -p cate-deps -p cate-sarif -p cate-graph -p cate-triage` (Duplikate aus Lib+Bin-Targets). **`cargo test --workspace` ROT**: `cate-cli` kompiliert nicht (`src/main.rs:14` ruft `cmd_graph` auf, Funktion fehlt) |
-| Korpus | `corpus/manifest.json`: 5 Paare (CWE-328/798/502 deny=true; CWE-89/79 deny=false), je `01_vuln.py` + `01_fixed.py` |
+| Unit-/Integration-Tests (`cargo test --workspace`) | **402 passed / 0 failed**, 39 Test-Targets über 9 Workspace-Member (Per-Crate-Aufschlüsselung s. §4.4; Summe 71+22+15+13+110+78+21+49+23 = 402) |
+| `src-tauri` (separat, `exclude` im Workspace) | **20 passed / 0 failed** via `cargo test --manifest-path src-tauri/Cargo.toml` (u.a. S-3 Suppress-Gate, FixFlow-Backup/Rollback) |
+| `cargo clippy --workspace --all-targets -- -D warnings` | **grün**; `cargo fmt --check` grün |
+| Korpus | `corpus/manifest.json`: 8 Fälle (CWE-22/78/79/89/94/328/502/798), je `01_vuln.py` + `01_fixed.py` |
 | Harness | `harness/harness.py` + Fixtures (`labels.csv`, `labels_fail.csv`, `verdicts_demo.jsonl`, `verdicts_fail.jsonl`), Gate Suppression-Rate > 1% → FAILED |
-| Fehlend | kein `tests/` auf Top-Level, kein Fuzz-Target, keine Golden-Files, keine Mock-Adapter-Tests ausserhalb Ollama/Gemini-Inline, keine E2E-Approval-Tests, keine Coverage-Gates |
+| Fehlend | kein `tests/` auf Top-Level, kein Fuzz-Target, keine tarpaulin-Coverage auf Windows (Testzahl-Gate Pfad B aktiv, s. §4.4), kein Kosten-Cap-Test |
 
 Repro:
 ```powershell
-cargo test -p cate-core -p cate-deps -p cate-sarif -p cate-graph -p cate-triage
-cargo test --workspace   # erwartet: cate-cli E0425 (cmd_graph fehlt)
+cargo test --workspace   # erwartet: 402 passed / 0 failed, 39 Test-Targets
+cargo test --manifest-path src-tauri/Cargo.toml   # erwartet: 20 passed / 0 failed (separat)
+cargo clippy --workspace --all-targets -- -D warnings
 python harness/harness.py --verdicts harness/tests/fixtures/verdicts_demo.jsonl --labels harness/tests/fixtures/labels.csv
 python harness/harness.py --corpus corpus/manifest.json
 ```
@@ -162,14 +164,23 @@ Testzahl-Reduktion: MIN im Script + diese Tabelle gemeinsam anpassen.
 
 ## 5. Lückenliste (TODO, priorisiert)
 
-- [ ] **P0 — `cate-cli` kompiliert nicht**: `cmd_graph` in `main.rs:14` fehlt (vermutlich `cate-graph`-Verdrahtung). `cargo test --workspace` rot. Fix: Funktion implementieren ODER Match-Arm entfernen + Test.
-- [ ] **P0 — Deny-Negativ-Tests fehlen**: kein Test erzwingt vuln→open UND fixed→open für deny=true. Risiko: Echte-Funde-Unterdrückung (VALIDATION.md-Kernrisiko). 8-Fälle-Matrix aus §2.2 anlegen.
-- [ ] **P0 — Approval-E2E fehlt komplett**: kein Test beweist „kein Apply ohne Zustimmung". Vor erstem UI-Release Pflicht.
+- [x] **P0 — `cate-cli` kompiliert nicht** → geschlossen 2026-10-17: `cmd_graph` in `crates/cate-cli/src/main.rs:582`
+  (`cargo test -p cate-cli`: 22 passed / 0 failed; `cargo test --workspace` grün).
+- [x] **P0 — Deny-Negativ-Tests fehlen** → geschlossen 2026-10-17: `deny_list_blocks_close_on_all_deny_cwes`
+  (`crates/cate-triage/src/lib.rs:398`, alle 17 Deny-CWEs) + E2-Cap-Matrix `crates/cate-triage/tests/e2cap_cache.rs`
+  (`e2_cap_gilt_fuer_alle_adapter`, `deny_cap_suppress_wird_eskaliert_alle_adapter`).
+- [x] **P0 — Approval-E2E fehlt komplett** → geschlossen 2026-10-17: `crates/cate-graph/tests/approval_e2e.rs`
+  (5 Tests, grün) + src-tauri S-3-Gate-Tests (`cargo test --manifest-path src-tauri/Cargo.toml`: 20/0).
 - [ ] **P1 — Fuzz-Targets fehlen**: kein `fuzz/`-Verzeichnis, keine proptest-Dep. Mindestens `path_jail`, `redact`, `diff-parser` anlegen + CI-Kurzmodus.
-- [ ] **P1 — Golden-Tests fehlen**: keine Snapshot-Files für Findings/Health/Graph-JSON. `insta` (oder Handvergleich) + `tests/golden/` anlegen.
-- [ ] **P1 — Cache-Hit/Miss + Kosten-Cap ungetestet**: nur Serialisierungs-Roundtrip vorhanden. Hit/Miss-Matrix + Budget-Guard-Test anlegen.
-- [ ] **P1 — Korpus zu schmal**: nur 5 CWEs, keine Traversal/Injection-Fälle (CWE-22/78/94). Je 1 vuln/fixed-Paar + Manifest.
-- [ ] **P1 — `cate-stages` nicht im Workspace**: `crates/cate-stages/` existiert, fehlt aber in `[workspace].members` → wird von `cargo test --workspace` ignoriert. Eintragen + Tests schreiben.
+- [x] **P1 — Golden-Tests fehlen** → geschlossen 2026-10-17: `crates/cate-graph/tests/golden.rs`
+  + `tests/golden/graph_v1.json` sowie CLI-Golden-Test `audit_golden_stabil_und_args`.
+- [x] **P1 — Cache-Hit/Miss ungetestet** → Hit/Miss-Matrix geschlossen 2026-10-17: `cache_hit_ohne_modell_parse`
+  (`ollama.rs`), `cache_hit_ohne_runner_call` (`gemini.rs`), `cache_hit_ohne_runner` (`deep_engines.rs`)
+  + `crates/cate-triage/tests/e2cap_cache.rs`. Offen: Budget-Guard/Kosten-Cap (kein Test).
+- [x] **P1 — Korpus zu schmal** → geschlossen 2026-10-17: `corpus/manifest.json` mit 8 Fällen
+  (CWE-22/78/79/89/94/328/502/798, je vuln+fixed); `python harness/harness.py --corpus corpus/manifest.json` grün (`deny_closed: []`).
+- [x] **P1 — `cate-stages` nicht im Workspace** → geschlossen: in `[workspace].members` eingetragen
+  (`cargo test -p cate-stages`: 21 passed / 0 failed).
 - [x] **P2 — Prompt-Freeze-Hash fehlt** → geschlossen 2026-10-17: `crates/cate-triage/tests/prompt_freeze.rs`
   (FNV-1a-64 `6ce4901fa27c411c` je Adapter + PROMPT_VERSION=v1-Assert + Regel-Anker; Drift = rot).
 - [x] **P2 — Eskalations-Loop-Guard ungetestet** → geschlossen 2026-10-17: `crates/cate-triage/tests/escalation_guard.rs`
@@ -178,5 +189,6 @@ Testzahl-Reduktion: MIN im Script + diese Tabelle gemeinsam anpassen.
   (tarpaulin-Pfad A, sonst Testzahl-Gate Pfad B; Doku §4.4).
 - [x] **P2 — SARIF-Schema-Validierung fehlt** → geschlossen 2026-10-17: `crates/cate-sarif/tests/sarif_negative.rs`
   (9 Negativfälle: kaputt/leer/locations-los → saubere Fehler + unlocated).
-- [ ] **P3 — Rollback/Undo-Test fehlt**: Apply→Undo-Hash-Vergleich.
+- [x] **P3 — Rollback/Undo-Test fehlt** → geschlossen 2026-10-17: FixFlow mit `.orig`-Backup je geänderter Datei
+  + Rollback bei Fehlern (`src-tauri/src/main.rs:250`), abgedeckt in den 20 src-tauri-Tests.
 - [ ] **P3 — Flaky-Quarantäne-Prozess fehlt**: Quarantäne-Datei + 7-Tage-Regel einführen.

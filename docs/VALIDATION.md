@@ -1,4 +1,6 @@
-# CateHunt v2 — Validation (Stand 14.10.2026)
+<!-- Copyright (c) 2026 R.S. - Geistiges Eigentum von R.S. Kopieren, Vervielfaeltigung -->
+<!-- oder Veraenderung ohne ausdrueckliche Genehmigung nicht erlaubt. -->
+# CateHunt v2 — Validation (Stand 17.10.2026)
 
 Rolle: Validator (praezises Reasoning-Modell, sicherheitsfokussiert).
 Kern-Risiko: FP-Reduktion vs False Negatives. Referenz: Beste Config unterdrueckte
@@ -214,3 +216,51 @@ Regeln:
 - Quelllage: Scope aus `cate_core::scope::changed_files_since`, Inventar aus
   `cate_core::scope::inventory`, Zeit via `cate_core::utc_now_rfc3339`,
   Provenienz via `ProvenanceRecord::current_with_model("audit")` (M-4).
+
+## 9. Runde 6/7 — Gates, total_e2_plus-Regel, Registry-OfflineDB (Stand 2026-10-17)
+
+Alle Zahlen per ausgefuehrtem Befehl belegt (Befehle s. TESTING.md §0/§4.4):
+`cargo test --workspace` = **402 passed / 0 failed** (39 Test-Targets);
+`cargo test --manifest-path src-tauri/Cargo.toml` = **20 passed / 0 failed** (separat,
+`src-tauri` steht in Workspace-`exclude`);
+`cargo clippy --workspace --all-targets -- -D warnings` + `cargo fmt --check` gruen.
+
+### 9.1 Gates (hart, Release-blockierend)
+
+1. **Suppression-Rate > 1 % → FAILED**, unabhaengig von FP-Reduktion (§1.3):
+   `python harness/harness.py --corpus corpus/manifest.json` liefert aktuell
+   `deny_closed: []` (8 Korpus-Faelle, kein Deny-Fall geschlossen).
+2. **Deny-Vorrang hart codiert, getestet**: `Deny-Policy > E2-Cap > Modell-Verdict > Heuristik`
+   (`deny_list_blocks_close_on_all_deny_cwes`, alle 17 Deny-CWEs;
+   E2-Cap-Matrix `crates/cate-triage/tests/e2cap_cache.rs`).
+3. **Coverage-Gate offline-faehig** (`ci/coverage_gate.ps1`/`.sh`, TESTING.md §4.4):
+   Pfad A (tarpaulin, `--fail-under 70`) wo verfuegbar, sonst Pfad B
+   (Testzahl-Gate je Crate, Summe 402, 0 failed Pflicht).
+4. **S-3 Suppress-Gate** (Begruendung + Reviewer + 30-Tage-Ablauf; Deny-Suppress blockiert):
+   20 src-tauri-Tests gruen (u.a. `abgelaufene_approval_blockt_apply_mit_expired`,
+   `deny_cwe_kann_nie_suppressen`).
+
+### 9.2 total_e2_plus-Regel (nur E2+ zaehlt als Bug)
+
+- Zaehlung echt, kein Stub: `let total_e2_plus: usize = by_level.values().sum()`
+  (`crates/cate-core/src/lib.rs:857`, Feld `:787`); E1/E0 fliessen nie ein
+  (Test `audit_unlocated_nicht_im_score`, `health.total_e2_plus == 0` bei reinen E1-Funden).
+- Negativ-Abgrenzung MCP: `get_graph` liefert bewusst **kein** `total_e2_plus` —
+  cate-graph hat keine Evidence-Daten, ein Hardcode-0 waere ein Fake-Wert
+  (`crates/cate-mcp/src/lib.rs:319`, gestrichen 2026-10-15, Spec `docs/MCP_TOOLS.md` §4).
+- Health-Farben/Verhalten nach Regel (PLAN.md §1): E0 grau eingeklappt, E3 rot oben, E4 gruen.
+
+### 9.3 Registry-OfflineDB (M1.5) inkl. Stub-Restbestand
+
+- Echte Pruefung ohne Netz: Format `cate-registry-db` v1 (`REGISTRY_DB_FORMAT/VERSION`,
+  `crates/cate-deps/src/lib.rs`), `--registry-db`-Flag, `deps_summary` im Scan-Report,
+  Typosquat-Kopplung gegen DB-Namen (1-Zeichen-Distanz).
+- Semantik mit DB: Treffer fuellt exists/age/downloads/advisory;
+  **Miss = nicht-existent + verdaechtig** (`offline_db_miss_means_not_exists_and_suspicious`).
+  Ohne DB erzeugt die CLI gar keine Checks mehr (keine fiktiven „safe“-Werte).
+- Stub-Restbestand: `registry_check_stub` ist als **deprecated** markiert
+  (`since = "0.1.0"`, Verweis auf `registry_check`/`registry_check_offline` mit `OfflineDb`);
+  der DB-lose Pfad (`exists: true`, Alter/Downloads None) ist nur noch darueber erreichbar.
+  Alle Tests laufen auf der OfflineDb-API: 13 deps-Tests
+  (5 lib inkl. `offline_db_hit_fills_fields`, 8 `tests/registry_check.rs`-Fixtures).
+- Beleg-Befehle: `cargo test -p cate-deps` (13/0), `cargo clippy -p cate-deps --all-targets -- -D warnings` (gruen, keine Deprecated-Warnung im Tree).

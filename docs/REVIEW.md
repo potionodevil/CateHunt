@@ -1,3 +1,5 @@
+<!-- Copyright (c) 2026 R.S. - Geistiges Eigentum von R.S. Kopieren, Vervielfaeltigung -->
+<!-- oder Veraenderung ohne ausdrueckliche Genehmigung nicht erlaubt. -->
 # CateHunt v2 — Review (Checker)
 
 Stand: 2026-10-14 | Prüfling: `E:/CodeCate` | Perspektive: kritisches Review-Modell (skeptisch)
@@ -81,3 +83,39 @@ Re-Review-Trigger: sobald `docs/PLAN.md` + mind. 1 Crate + `docs/VALIDATION.md` 
 3. Phase-4-Sandbox als Alleinstellungsmerkmal ohne jeden Sicherheitsnachweis — höchstes Risiko (M-6).
 4. Path-Traversal + Secrets ohne Spezifikation/Tests — klassische Einfallstore (M-7, M-8).
 5. Evidence-Gate-/Proof-over-Prose-Konformität derzeit unbelegbar — Re-Review mit Belegpflicht nötig (S-1, §5).
+
+## 7. Nachtrag Runde 6/7 (2026-10-17, Doku-Sync)
+
+Geprueft per ausgefuehrtem Befehl (s. TESTING.md §0/§4.4, VALIDATION.md §9):
+`cargo test --workspace` = **402 passed / 0 failed** (39 Test-Targets),
+`cargo test --manifest-path src-tauri/Cargo.toml` = **20/0**,
+`cargo clippy --workspace --all-targets -- -D warnings` + `cargo fmt --check` gruen.
+
+### Ampel: 🟡 GELB (kurz vor gruen)
+
+| Bereich | Ampel | Begründung (mit Beleg) |
+|---|---|---|
+| Build + Workspace-Tests | 🟢 | 402/0, 39 Targets; 9 Member, 2 Binaries, src-tauri separat 20/0 |
+| Deny/E2-Cap/Suppress-Gates | 🟢 | 17-CWE-Negativtest, E2-Cap-Matrix, S-3-Gate-Tests, Korpus `deny_closed: []` |
+| Registry-Check (M1.5) | 🟢 | Offline-DB v1 real, Stub deprecated, Tests auf OfflineDb (13/0) |
+| total_e2_plus / Health | 🟢 | echte E2+-Zaehlung (`lib.rs:857`); MCP-`get_graph` ohne Fake-0 |
+| Sandbox (M-6) | 🟡 | S1+S2+S4 + Profile/N1–N4 da (23 Tests); **S3-Erstlauf in CI offen** |
+| Scope/Health-Feinschliff | 🟡 | M-3 Confirm-Schritt fehlt weiter; Health-Schwellen-Rekalibrierung gesamt offen |
+| Hygiene | 🟡 | Workspace-Clippy gruen, aber **`src-tauri`-Clippy ROT (pre-existing)**: `cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings` meldet 10 Fehler (ungenutzte Methoden + Doc-Listen-Einrueckung); von diesem Doku-Sync unberuehrt, Fix ausstehend |
+| Fuzz | 🔴 | weiter kein `fuzz/`-Target, keine proptest-Dep (P1 offen) |
+| **Gesamt** | **🟡 GELB** | **Kein MVP-Sign-off vor: src-tauri-Clippy-Fix, Fuzz-Target, S3-Erstlauf in CI.** |
+
+### Geschlossen seit Runde 6 (Auszug, je mit Test-Beleg)
+
+M-1 ✅ (Artefakte + Build gruen), M-2 ✅ (`check_dependencies` live, `verify_fix` Sandbox-gated),
+M-4 ✅ (Provenienz verdrahtet), M-5 ✅ (`trend.py`), M-7 ✅ (Jails + Rev-Validierung),
+M-8 ✅ (`redact.rs` + Tests), S-2 ✅ (Adapter-Pinning), S-5 ✅ (contested),
+L3/L4 ✅ (Reachability/Chaining, 78 Graph-Tests), P0/P1-Testluecken ✅ (Deny-Negativ, Approval-E2E,
+Golden, Cache-Hit/Miss, Korpus-8, Rollback — s. TESTING.md §5).
+
+### Offene Punkte (Rest, priorisiert)
+
+1. `src-tauri`-Clippy rot (10 Fehler, s. Ampel) — Fix ausstehend, kein Doku-Thema.
+2. Fuzz-Targets (`path_jail`, `redact`, `diff-parser`) + CI-Kurzmodus.
+3. S3-Erstlauf in CI (echter Container-Run); Health-Schwellen-Rekalibrierung gesamt.
+4. M-3 Confirm-Schritt (explizit), Budget-Guard/Kosten-Cap-Test, Flaky-Quarantaene-Prozess.

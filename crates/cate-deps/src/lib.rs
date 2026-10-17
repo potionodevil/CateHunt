@@ -1,7 +1,7 @@
 // Copyright (c) 2026 R.S. - Geistiges Eigentum von R.S. Kopieren, Vervielfaeltigung
 // oder Veraenderung ohne ausdrueckliche Genehmigung nicht erlaubt.
-//! cate-deps: Lockfile-Parser (cargo/package-lock) + Registry-Check Stub
-//! (Slopsquatting: Existenz/Alter/Downloads).
+//! cate-deps: Lockfile-Parser (cargo/package-lock) + Registry-Check
+//! (Slopsquatting via Offline-DB `OfflineDb`; `registry_check_stub` deprecated).
 use cate_core::EvidenceLevel;
 use serde::{Deserialize, Serialize};
 
@@ -145,10 +145,15 @@ pub fn parse_package_lock(json: &str) -> Result<Vec<Dependency>, String> {
     Ok(out)
 }
 
-/// Registry-Check Stub (kein Netzwerk in Phase 1):
-/// Heuristik: Name mit Tippfehler-Muster (z.B. Dopplung, bekannte Praefixe)
-/// oder Version "0.0.0" gilt als verdaechtig. Echte Pruefung
-/// (Existenz/Alter/Downloads via crates.io-/npm-API) folgt in Phase 2.
+/// Legacy-Registry-Check ohne DB (kein Netzwerk, Phase-1-Verhalten):
+/// `exists` immer true, Alter/Downloads None, nur Tippfehler-Heuristik.
+/// Seit M1.5 (Offline-DB `OfflineDb`, `registry_check`) deprecated:
+/// mit DB gelten unbekannte Pakete als nicht-existent + verdaechtig,
+/// und die CLI erzeugt ohne DB gar keine Checks mehr.
+#[deprecated(
+    since = "0.1.0",
+    note = "Nur Legacy-Verhalten (exists immer true). Bitte `registry_check` / `registry_check_offline` mit `OfflineDb` verwenden."
+)]
 pub fn registry_check_stub(dep: &Dependency) -> RegistryCheck {
     registry_check_offline(dep, None)
 }
@@ -354,8 +359,8 @@ pub fn registry_check_offline(dep: &Dependency, db: Option<&OfflineDb>) -> Regis
         None => RegistryCheck {
             name: dep.name.clone(),
             version: dep.version.clone(),
-            // Legacy-Stub-Pfad (nur noch via registry_check_stub); die CLI
-            // erzeugt ohne DB gar keine Checks mehr.
+            // Legacy-Pfad ohne DB (nur noch via deprecated `registry_check_stub`
+            // erreichbar); die CLI erzeugt ohne DB gar keine Checks mehr.
             exists: true,
             age_days: None,
             downloads: None,
@@ -458,14 +463,14 @@ mod tests {
     }
 
     #[test]
-    fn typosquat_stub_flags() {
+    fn typosquat_heuristik_flaggt_ohne_db() {
         let dep = Dependency {
             name: "lodas".to_string(),
             version: "1.0.0".to_string(),
             registry: "npm".to_string(),
             evidence: EvidenceLevel::E0,
         };
-        assert!(registry_check_stub(&dep).slopsquat_suspicious);
+        assert!(registry_check(&dep, None).slopsquat_suspicious);
     }
 
     #[test]
@@ -512,14 +517,14 @@ mod tests {
     }
 
     #[test]
-    fn stub_without_db_keeps_old_behavior() {
+    fn check_ohne_db_behaelt_legacy_verhalten() {
         let dep = Dependency {
             name: "serde".to_string(),
             version: "1.0.0".to_string(),
             registry: "crates.io".to_string(),
             evidence: EvidenceLevel::E0,
         };
-        let c = registry_check_stub(&dep);
+        let c = registry_check(&dep, None);
         assert!(c.exists);
         assert!(!c.slopsquat_suspicious);
     }
