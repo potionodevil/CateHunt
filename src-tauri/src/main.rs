@@ -112,7 +112,7 @@ fn health(path: Option<String>) -> Health {
 }
 
 /// Modulgraph (`cate-graph::get_graph`): Knoten `{id, path, health, color}`
-/// + Kanten (use/mod-Abhaengigkeiten). `path` = Repo-Root (optional,
+/// sowie Kanten (use/mod-Abhaengigkeiten). `path` = Repo-Root (optional,
 /// Default: Arbeitsverzeichnis). Knoten-Farben folgen `health_color`
 /// (gruen > 85, gelb 60–85, rot < 60) — konsistent mit UI-`healthColor`
 /// und `cate-core`-Health-Scores. Kann der Graph nicht gebaut werden
@@ -200,6 +200,57 @@ fn apply_fix(
         .apply(&proposal_id, &approved_by)
 }
 
+/// Suppress-Vorschlag zu einer CWE anlegen (Status `Proposed`).
+/// Bedient den UI-`Unterdruecken`-Button: Deny-CWEs werden bereits hier mit
+/// `DENY_SUPPRESS_BLOCKED` abgelehnt (nie suppressen, nur eskalieren).
+/// `ttl_days` = Wunsch-Gueltigkeit in Tagen ab Zustimmung (Default 30).
+#[tauri::command]
+fn suggest_suppress_fix(
+    state: tauri::State<Mutex<fixflow::FixStore>>,
+    finding_id: String,
+    title: String,
+    rationale: String,
+    cwe: String,
+    ttl_days: Option<u64>,
+) -> Result<cate_graph::proposal::Proposal, String> {
+    state
+        .lock()
+        .map_err(|e| format!("store poisoned: {e}"))?
+        .suggest_suppress(&finding_id, &title, &rationale, &cwe, ttl_days)
+}
+
+/// Zustimmung zu einem Proposal mit Begruendung (ohne Reviewer).
+/// Der Reviewer wird spaetestens bei `apply_fix` aus `approved_by`
+/// nachgetragen; explizit geht `approve_fix`.
+#[tauri::command]
+fn approve_fix_simple(
+    state: tauri::State<Mutex<fixflow::FixStore>>,
+    proposal_id: String,
+    rationale: String,
+) -> Result<cate_graph::proposal::Proposal, String> {
+    state
+        .lock()
+        .map_err(|e| format!("store poisoned: {e}"))?
+        .approve(&proposal_id, &rationale)
+}
+
+/// Zustimmungs-Status eines Proposals (Reviewer, Zeitraum, Ablaufdatum).
+/// Vor der Zustimmung sind `approval` und `expires_at` null.
+#[tauri::command]
+fn fix_approval(
+    state: tauri::State<Mutex<fixflow::FixStore>>,
+    proposal_id: String,
+) -> Result<serde_json::Value, String> {
+    let store = state.lock().map_err(|e| format!("store poisoned: {e}"))?;
+    let approval = store.approval_of(&proposal_id);
+    let expires_at = store.expires_at_of(&proposal_id);
+    serde_json::to_value(serde_json::json!({
+        "approval": approval,
+        "expires_at": expires_at,
+    }))
+    .map_err(|e| format!("json: {e}"))
+}
+
 /// Audit-Log aller angewendeten Fixes (append-only).
 #[tauri::command]
 fn fix_audit(
@@ -277,8 +328,11 @@ fn main() {
             health,
             graph,
             suggest_fix,
+            suggest_suppress_fix,
             approve_fix,
+            approve_fix_simple,
             apply_fix,
+            fix_approval,
             preview_fix,
             apply_fix_files,
             fix_audit

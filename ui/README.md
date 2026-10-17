@@ -1,12 +1,12 @@
 # CateHunt UI
 
-Statisches Desktop-Frontend (offline-faehig, keine Netz-Calls). ERP: `R.S. 2026`.
+Statisches Desktop-Frontend (offline-fähig, keine Netz-Calls). ERP: `R.S. 2026`.
 
 ## Dateien
 
 - `dist/index.html` — **kanonische Quelle** der Review-Workbench (Tabs: Review / Editor / Graph / Einstellungen). Es gibt **keinen Build-Schritt** (kein Bundler, kein Transpiler): die Datei wird direkt editiert und ist selbst das `dist`-Artefakt. Fixtures unter `dist/fixtures/*.json` bzw. `fixtures/*.json` spiegeln das Backend-Format (list_findings/health/graph).
 - `preview.html` — minimale Phase-3-Vorschau nur für den Review-Tab; lädt `fixtures/findings.json` + `fixtures/health.json`. Wird NICHT vom Tauri-Backend benutzt.
-- fixtures: identisch in `ui/fixtures/` (fuer preview.html) und `ui/dist/fixtures/` (fuer index.html-Fallback); `dist` hat zusaetzlich `graph.json` fuer den Modulgraph.
+- fixtures: identisch in `ui/fixtures/` (für preview.html) und `ui/dist/fixtures/` (für index.html-Fallback); `dist` hat zusätzlich `graph.json` für den Modulgraph.
 
 ## Datenquellen zur Laufzeit
 
@@ -31,6 +31,6 @@ das Artefakt.
 
 ## Suppress / Deny-List (UI-Verhalten)
 
-- Buttons: `Bestätigen` / `Eskalieren` / `Unterdruecken` (deutsche Labels).
+- Buttons: `Bestätigen` / `Eskalieren` / `Unterdrücken` (deutsche Labels).
 - Findings mit `deny: true` (Krypto/Auth/Deserialisierung) bekommen den Suppress-Button
   als `disabled` + Deny-Note; Backend-Logik (verdict_cap → escalate) bleibt im cate-triage-Crate.

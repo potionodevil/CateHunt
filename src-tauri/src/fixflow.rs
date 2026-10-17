@@ -332,7 +332,8 @@ impl FixStore {
         self.approvals.get(proposal_id).cloned()
     }
 
-    /// Test-/Support-Hook: laesst eine Zustimmung sofort verfallen.
+    /// Test-Hook: laesst eine Zustimmung sofort verfallen.
+    #[cfg(test)]
     pub fn force_expire(&mut self, proposal_id: &str) -> Result<(), String> {
         let m = self
             .approvals

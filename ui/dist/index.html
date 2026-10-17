@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<!-- Copyright (c) 2026 R.S. - Geistiges Eigentum von R.S. Kopieren, Vervielfaeltigung oder Veraenderung ohne ausdrueckliche Genehmigung nicht erlaubt. -->
-<!-- CateHunt Desktop-Frontend: statisch, offline-faehig. Daten via Tauri-Commands (list_findings/health/graph), Fallback: fixtures/*.json. -->
+<!-- Copyright (c) 2026 R.S. - Geistiges Eigentum von R.S. Kopieren, Vervielfältigung oder Veränderung ohne ausdrückliche Genehmigung nicht erlaubt. -->
+<!-- CateHunt Desktop-Frontend: statisch, offline-fähig. Daten via Tauri-Commands (list_findings/health/graph), Fallback: fixtures/*.json. -->
 <!-- KANONISCHE QUELLE: Diese Datei (ui/dist/index.html) ist das Original — es gibt KEINEN Build-Schritt (kein Bundler, kein Transpiler). -->
-<!-- Aenderungsanleitung: (1) Direkt in dieser Datei editieren (UTF-8, deutsche UI-Labels). -->
-<!-- (2) data-act/data-ed-Attribute sind Code-Bezeichner und bleiben Englisch. (3) Nach Aenderung: Datei im Browser -->
+<!-- Änderungsanleitung: (1) Direkt in dieser Datei editieren (UTF-8, deutsche UI-Labels). -->
+<!-- (2) data-act/data-ed-Attribute sind Code-Bezeichner und bleiben Englisch. (3) Nach Änderung: Datei im Browser -->
 <!-- oder via Tauri laden und per Audit-Log-Gegenprobe testen. (4) Fixtures unter fixtures/*.json spiegeln das -->
 <!-- Backend-Format. (5) Keine Secrets einbetten — statisch, offline, keine Netz-Calls. -->
 <html lang="de">
@@ -111,6 +111,8 @@
   .ring .inner span { font-size: 10px; color: var(--muted); }
   .legend { font-size: 12px; color: var(--muted); margin-top: 8px; text-align: center; }
   .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin: 0 4px 0 10px; }
+  .legend.gleg { text-align: left; margin: 0 0 8px; }
+  .legend.gleg .arr { font-weight: 700; color: var(--faint); }
   .bar { display: grid; grid-template-columns: 30px 1fr 64px; align-items: center; gap: 8px; font-size: 12.5px; margin: 5px 0; }
   .bar .lbl { font-weight: 700; font-variant-numeric: tabular-nums; }
   .bar .num { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
@@ -192,6 +194,7 @@
     <div class="card">
       <h2>Modulgraph (use-/mod-Abhängigkeiten)</h2>
       <p class="hint">Knoten = Modul (Farbe nach Health-Regel), Kante = Abhängigkeit. Knoten anklicken für Details.</p>
+      <div class="legend gleg" aria-label="Legende Modulgraph"><span class="dot" style="background:#1e7e34"></span>grün &gt;85<span class="dot" style="background:#b98a00;margin-left:10px"></span>gelb 60–85<span class="dot" style="background:#c81e1e;margin-left:10px"></span>rot &lt;60<span class="arr"> → </span>Kante = Abhängigkeit (Pfeil zeigt auf benutztes Modul)</div>
       <p class="g-meta" id="g-meta" aria-live="polite">Modulgraph wird geladen …</p>
       <div id="g-svg" role="img" aria-label="Modulgraph"></div>
       <div id="g-detail" aria-live="polite"></div>
@@ -219,11 +222,11 @@
   </section>
 </main>
 <script>
-const ORDER = { E3: 0, E2: 1, E1: 2, E4: 3, E0: 4 }; // E3 rot oben, E4 gruen, E0 grau eingeklappt
+const ORDER = { E3: 0, E2: 1, E1: 2, E4: 3, E0: 4 }; // E3 rot oben, E4 grün, E0 grau eingeklappt
 const COLORS = { E3: '#c81e1e', E2: '#d96c00', E1: '#8a6d00', E4: '#1e7e34', E0: '#6e6e6e' };
 let findings = [], health = null, modgraph = { nodes: [], edges: [] }, graphSrc = '', gShown = [], gSel = null;
 const CATS = ['crypto', 'auth', 'deserialization', 'injection', 'other'];
-// Demo-Vorschlaege je Kategorie (Platzhalter bis Backend suggest_fix liefert).
+// Demo-Vorschläge je Kategorie (Platzhalter bis Backend suggest_fix liefert).
 const FIX_DEMO = {
   crypto: { old: "hashlib.md5(password.encode()).hexdigest()", neu: "hashlib.scrypt(password.encode(), salt=os.urandom(16), n=2**14, r=8, p=1)" },
   auth: { old: 'API_TOKEN = "sk-live-12345"', neu: 'API_TOKEN = os.environ["API_TOKEN"]  # Secret aus Umgebung' },
@@ -290,7 +293,7 @@ function buildSuggestions() {
   // Manuelle Entscheidungen (angewendet/abgelehnt/scharf) über Rebuilds bewahren.
   const prev = {};
   for (const s of suggestions) { prev[s.id] = { state: s.state, armed: s.armed, expires: s.expires }; }
-  // S-3 Unterdruecken-Gate: jede Genehmigung verfaellt nach 30 Tagen (Default).
+  // S-3 Unterdrücken-Gate: jede Genehmigung verfällt nach 30 Tagen (Default).
   const APPROVAL_TTL_MS = 30 * 86400 * 1000;
   // Ein Vorschlag pro Finding ab E1 (E0 ohne Beleg -> kein Vorschlag).
   suggestions = findings
@@ -305,7 +308,7 @@ function buildSuggestions() {
                state: (p && p.state !== 'offen' && p.state !== 'auto') ? p.state : 'offen',
                armed: (p && p.state === 'offen') ? !!p.armed : false };
     });
-  // Automatische Anpassung: nur offene Vorschlaege genehmigter Kategorien anwenden + Audit.
+  // Automatische Anpassung: nur offene Vorschläge genehmigter Kategorien anwenden + Audit.
   if (settings.auto) {
     for (const s of suggestions) {
       if (s.state === 'offen' && settings.approved[s.category]) {
@@ -355,8 +358,8 @@ function render() {
       '<div class="actions">' +
         '<button data-act="confirm">Bestätigen</button>' +
         '<button data-act="escalate">Eskalieren</button>' +
-        '<button data-act="suppress"' + (deny ? ' disabled title="Deny-List: Unterdruecken blockiert (Krypto/Auth/Deserialisierung)"' : '') + '>Unterdruecken</button>' +
-        (deny ? '<span class="deny-note">Unterdruecken blockiert (' + esc(x.cwe) + ') — nur Eskalieren.</span>' : '') +
+        '<button data-act="suppress"' + (deny ? ' disabled title="Deny-List: Unterdrücken blockiert (Krypto/Auth/Deserialisierung)"' : '') + '>Unterdrücken</button>' +
+        (deny ? '<span class="deny-note">Unterdrücken blockiert (' + esc(x.cwe) + ') — nur Eskalieren.</span>' : '') +
       '</div></div>' +
       (x.evidence === 'E0' ? '<button data-act="toggle" aria-expanded="false">Ein-/Ausklappen (E0 grau)</button>' : '');
     list.appendChild(el);
@@ -444,11 +447,27 @@ function renderModuleGraph() {
   let s = '<svg width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '" role="img">' +
     '<defs><marker id="g-arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">' +
     '<path d="M 0 1 L 9 5 L 0 9 z" fill="#8a8a86"></path></marker></defs>';
-  for (const e of edges) {
+  // Kanten-Fächerung (reine Geometrie): Ports je Quell-/Zielknoten vertikal spreizen
+  // und als Kurve zeichnen, damit sich Kanten an zentralen Knoten nicht überlagern.
+  const drawEdges = edges.filter(e => pos.get(e.from) && pos.get(e.to));
+  const outTotE = new Map(), inTotE = new Map();
+  for (const e of drawEdges) {
+    outTotE.set(e.from, (outTotE.get(e.from) || 0) + 1);
+    inTotE.set(e.to, (inTotE.get(e.to) || 0) + 1);
+  }
+  const outSeq = new Map(), inSeq = new Map();
+  for (const e of drawEdges) {
     const a = pos.get(e.from), b = pos.get(e.to);
-    if (!a || !b) continue;
-    s += '<line x1="' + (a.x + BW) + '" y1="' + (a.y + BH / 2) + '" x2="' + (b.x - 3) + '" y2="' + (b.y + BH / 2) +
-      '" stroke="#8a8a86" stroke-width="1.5" marker-end="url(#g-arr)"><title>' + esc(e.from) + ' → ' + esc(e.to) + '</title></line>';
+    const no = outTotE.get(e.from), ni = inTotE.get(e.to);
+    const oi = outSeq.get(e.from) || 0; outSeq.set(e.from, oi + 1);
+    const ii = inSeq.get(e.to) || 0; inSeq.set(e.to, ii + 1);
+    const y1 = a.y + BH / 2 + (no > 1 ? (oi / (no - 1) - 0.5) * (BH - 16) : 0);
+    const y2 = b.y + BH / 2 + (ni > 1 ? (ii / (ni - 1) - 0.5) * (BH - 16) : 0);
+    const x1 = a.x + BW, x2 = b.x - 4;
+    const dx = Math.max(24, (x2 - x1) / 2);
+    s += '<path d="M ' + x1 + ' ' + y1.toFixed(1) + ' C ' + (x1 + dx).toFixed(1) + ' ' + y1.toFixed(1) +
+      ', ' + (x2 - dx).toFixed(1) + ' ' + y2.toFixed(1) + ', ' + x2 + ' ' + y2.toFixed(1) +
+      '" fill="none" stroke="#8a8a86" stroke-width="1.5" marker-end="url(#g-arr)"><title>' + esc(e.from) + ' → ' + esc(e.to) + '</title></path>';
   }
   for (let gi = 0; gi < shown.length; gi++) {
     const n = shown[gi];
@@ -459,7 +478,7 @@ function renderModuleGraph() {
     const label = String(n.id).length > 26 ? String(n.id).slice(0, 25) + '…' : String(n.id);
     s += '<g class="g-node" data-gi="' + gi + '" tabindex="0" role="button" aria-current="' + (gSel === n.id) + '" aria-label="Modul ' + esc(n.id) + ', Health ' + esc(n.health == null ? '–' : n.health) + ' (' + col + ')"><title>' + esc(n.id) + ' · Health ' + esc(n.health == null ? '–' : n.health) + ' (' + col + ')</title>' +
       '<rect x="' + p.x + '" y="' + p.y + '" width="' + BW + '" height="' + BH + '" rx="6" fill="' + tint + '" stroke="' + hex + '" stroke-width="2"></rect>' +
-      '<text x="' + (p.x + 10) + '" y="' + (p.y + 19) + '" font-size="11.5" font-weight="700" fill="#1b1b1b">' + esc(label) + '</text>' +
+      '<text x="' + (p.x + 10) + '" y="' + (p.y + 19) + '" font-size="11.5" font-weight="700" fill="#1b1b1b"><title>' + esc(n.id) + '</title>' + esc(label) + '</text>' +
       '<text x="' + (p.x + 10) + '" y="' + (p.y + 36) + '" font-size="11" fill="' + hex + '">Health ' + esc(n.health ?? '–') + ' · ' + col + '</text></g>';
   }
   s += '</svg>';
@@ -473,7 +492,7 @@ function renderModuleGraph() {
     const deps = (adj.get(n.id) || []).slice().sort();
     const col = gColOf(n);
     const hex = gHex(col);
-    rows += '<tr><td><code>' + esc(n.id) + '</code><br><span style="color:var(--faint);font-size:11px">' + esc(n.path || '') + '</span></td>' +
+    rows += '<tr><td><code title="' + esc(n.id) + (n.path ? ' — ' + esc(n.path) : '') + '">' + esc(n.id) + '</code><br><span style="color:var(--faint);font-size:11px">' + esc(n.path || '') + '</span></td>' +
       '<td class="num"><span class="dot" style="background:' + hex + '"></span>' + esc(n.health ?? '–') + ' (' + col + ')</td>' +
       '<td>' + (deps.length ? deps.map(d => '<code>' + esc(d) + '</code>').join(', ') : '<span style="color:var(--faint)">—</span>') + '</td></tr>';
   }
@@ -532,10 +551,10 @@ function renderEditor() {
     if (s.state === 'angewendet') status = '<span class="status applied">✓ übernommen</span>';
     else if (s.state === 'abgelehnt') status = '<span class="status rejected">✗ abgelehnt</span>';
     else if (s.state === 'auto') status = '<span class="status auto">⚡ automatisch angewendet (Kategorie „' + esc(s.category) + '“ genehmigt)</span>';
-    // S-3: abgelaufene oder Deny-blockierte Vorschlaege nicht uebernehmbar, mit Begruendungstext.
+    // S-3: abgelaufene oder Deny-blockierte Vorschläge nicht übernehmbar, mit Begründungstext.
     const expired = Date.now() > s.expires;
     const blockedReason = s.deny
-      ? 'Übernehmen blockiert (Deny-CWE ' + esc(s.cwe || '?') + ': Krypto/Auth/Deserialisierung) — kein Unterdruecken, nur Eskalieren. Grund: Deny-List (cate-triage verdict_cap).'
+      ? 'Übernehmen blockiert (Deny-CWE ' + esc(s.cwe || '?') + ': Krypto/Auth/Deserialisierung) — kein Unterdrücken, nur Eskalieren. Grund: Deny-List (cate-triage verdict_cap).'
       : (expired
         ? 'Genehmigung abgelaufen am ' + new Date(s.expires).toLocaleDateString('de-DE') + ' — erneut anfordern (Default: 30 Tage).'
         : '');
@@ -613,7 +632,7 @@ document.getElementById('suggestions').addEventListener('click', e => {
   const s = suggestions.find(x => x.id === card.dataset.sid); if (!s || s.state !== 'offen') return;
   // S-3-Guard (Defense in Depth zum disabled-Button): blockierte Klicks nur auditieren.
   if (b.dataset.ed === 'apply' && (s.deny || Date.now() > s.expires)) {
-    logAudit('BLOCKIERT ' + s.id + ' (' + (s.deny ? 'Deny-CWE ' + (s.cwe || '?') + ', kein Unterdruecken' : 'Genehmigung abgelaufen') + ')');
+    logAudit('BLOCKIERT ' + s.id + ' (' + (s.deny ? 'Deny-CWE ' + (s.cwe || '?') + ', kein Unterdrücken' : 'Genehmigung abgelaufen') + ')');
     renderEditor();
     return;
   }
