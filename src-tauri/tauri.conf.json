@@ -5,7 +5,6 @@
   "identifier": "de.catehunt.review",
   "build": {
     "frontendDist": "../ui/dist",
-    "devUrl": "http://localhost:1420",
     "beforeDevCommand": "",
     "beforeBuildCommand": ""
   },

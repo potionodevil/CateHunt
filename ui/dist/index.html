@@ -84,7 +84,14 @@
   #g-svg svg text { font-family: var(--font); }
   #g-svg .g-node { cursor: pointer; }
   #g-svg .g-node:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
-  #g-svg .g-node[aria-current="true"] rect { stroke-width: 4; }
+  #g-svg .g-node[aria-current="true"] circle.halo { stroke-width: 4; }
+  .g-controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 0 0 8px; }
+  .g-controls button { min-height: 32px; font-size: 12.5px; }
+  .prov { font-size: 11px; font-weight: 700; border: 1px dashed currentColor; border-radius: 4px; padding: 0 6px; white-space: nowrap; }
+  #rescan-status { font-size: 12px; color: var(--muted); }
+  #rescan-status.busy { color: #0b5ed7; font-weight: 700; }
+  #rescan-status.done { color: #1e7e34; font-weight: 700; }
+  #rescan-status.err { color: var(--e3); font-weight: 700; }
   #g-detail { margin-top: 8px; }
   #g-detail:empty { display: none; }
   #g-detail .g-d { border: 1px solid var(--line); border-radius: 6px; background: #fff; padding: 8px 12px; font-size: 12.5px; }
@@ -158,6 +165,10 @@
     <label>Level <select id="f-level"><option value="">alle</option><option>E3</option><option>E2</option><option>E1</option><option>E4</option><option>E0</option></select></label>
     <label>Kategorie <select id="f-cat"><option value="">alle</option><option>crypto</option><option>auth</option><option>deserialization</option><option>injection</option><option>other</option></select></label>
     <label><input type="checkbox" id="f-hide-e0"> E0 ausblenden</label>
+    <label>Erster AI-Scan <select id="m-first" aria-label="Erster AI-Scan"><option value="off">Aus</option><option value="ollama">Ollama</option><option value="gemini">Gemini</option></select></label>
+    <label>Zweiter/Deep-Scan <select id="m-deep" aria-label="Zweiter Deep-Scan"><option value="off">Aus</option><option value="opencode">OpenCode</option><option value="claude">Claude</option></select></label>
+    <button id="rescan" title="Scan neu anstossen (Tauri rescan/scan bzw. Daten neu laden)">↻ Rescan</button>
+    <span id="rescan-status" role="status" aria-live="polite"></span>
     <span id="count" aria-live="polite"></span>
   </div>
   <div id="list"></div>
@@ -192,9 +203,15 @@
       </div>
     </div>
     <div class="card">
-      <h2>Modulgraph (use-/mod-Abhängigkeiten)</h2>
-      <p class="hint">Knoten = Modul (Farbe nach Health-Regel), Kante = Abhängigkeit. Knoten anklicken für Details.</p>
-      <div class="legend gleg" aria-label="Legende Modulgraph"><span class="dot" style="background:#1e7e34"></span>grün &gt;85<span class="dot" style="background:#b98a00;margin-left:10px"></span>gelb 60–85<span class="dot" style="background:#c81e1e;margin-left:10px"></span>rot &lt;60<span class="arr"> → </span>Kante = Abhängigkeit (Pfeil zeigt auf benutztes Modul)</div>
+      <h2>Modulgraph als Netz (radial, Projektmitte)</h2>
+      <p class="hint">Zentralknoten = Projektmitte, Module kreisförmig darum, Kanten als Kurven (Farbe = Health). Knoten anklicken für Details. Zoom per Buttons.</p>
+      <div class="legend gleg" aria-label="Legende Modulgraph"><span class="dot" style="background:#1e7e34"></span>grün &gt;85<span class="dot" style="background:#b98a00;margin-left:10px"></span>gelb 60–85<span class="dot" style="background:#c81e1e;margin-left:10px"></span>rot &lt;60<span class="arr"> → </span>Kante = Abhängigkeit (Kurve zum benutzten Modul)</div>
+      <div class="g-controls" role="toolbar" aria-label="Graph-Zoom">
+        <button id="g-zoom-out" aria-label="Verkleinern">− Zoom</button>
+        <button id="g-zoom-in" aria-label="Vergrössern">+ Zoom</button>
+        <button id="g-zoom-reset">Reset</button>
+        <span class="g-meta" id="g-zoom-label" aria-live="polite"></span>
+      </div>
       <p class="g-meta" id="g-meta" aria-live="polite">Modulgraph wird geladen …</p>
       <div id="g-svg" role="img" aria-label="Modulgraph"></div>
       <div id="g-detail" aria-live="polite"></div>
@@ -209,6 +226,15 @@
         <label for="set-auto"><b>Automatische Anpassung</b> (Standard: AUS) — wenn AN, werden Vorschläge aus genehmigten Kategorien automatisch angewendet + Audit-Log-Eintrag.</label>
       </div>
       <div id="approved-cats" style="font-size:14px"></div>
+    </div>
+    <div class="card">
+      <h2>Modell-Auswahl (AI-Scans)</h2>
+      <p class="hint">Erster Scan läuft über Ollama/Gemini, zweiter (Deep) über OpenCode/Claude. Persistiert in localStorage, wird dem Backend als Parameter mitgegeben sobald es die Commands anbietet.</p>
+      <div class="setting-row"><label for="set-first" style="min-width:170px"><b>Erster AI-Scan</b></label>
+        <select id="set-first"><option value="off">Aus</option><option value="ollama">Ollama</option><option value="gemini">Gemini</option></select></div>
+      <div class="setting-row"><label for="set-deep" style="min-width:170px"><b>Zweiter/Deep-Scan</b></label>
+        <select id="set-deep"><option value="off">Aus</option><option value="opencode">OpenCode</option><option value="claude">Claude</option></select></div>
+      <div class="hint" id="model-note"></div>
     </div>
     <div class="card">
       <h2>Audit-Log</h2>
@@ -237,6 +263,29 @@ const FIX_DEMO = {
 let suggestions = [];
 // Einstellungen (Default: AUS), persistent in localStorage.
 let settings = { auto: false, approved: { injection: true, other: true, crypto: false, auth: false, deserialization: false } };
+// Modell-Auswahl: Erster AI-Scan (ollama/gemini/aus) + Zweiter/Deep (opencode/claude/aus).
+let models = { first: 'off', deep: 'off' };
+try {
+  const m = JSON.parse(localStorage.getItem('catehunt-models') || 'null');
+  if (m && typeof m === 'object') {
+    if (['off', 'ollama', 'gemini'].includes(m.first)) models.first = m.first;
+    if (['off', 'opencode', 'claude'].includes(m.deep)) models.deep = m.deep;
+  }
+} catch (e) {}
+function saveModels() { localStorage.setItem('catehunt-models', JSON.stringify(models)); }
+function syncModelSelects() {
+  for (const [id, v] of [['m-first', models.first], ['m-deep', models.deep], ['set-first', models.first], ['set-deep', models.deep]]) {
+    const el = document.getElementById(id); if (el) el.value = v;
+  }
+  const note = document.getElementById('model-note');
+  if (note) note.textContent = 'Aktiv: Erster=' + models.first + ' · Deep=' + models.deep + ' (gespeichert).';
+}
+function setModel(which, v) {
+  if (which === 'first' && ['off', 'ollama', 'gemini'].includes(v)) models.first = v;
+  if (which === 'deep' && ['off', 'opencode', 'claude'].includes(v)) models.deep = v;
+  saveModels(); syncModelSelects();
+  logAudit('MODELL ' + which + '=' + v);
+}
 try {
   const s = JSON.parse(localStorage.getItem('catehunt-settings') || 'null');
   if (s && typeof s === 'object') {
@@ -328,6 +377,7 @@ function renderHealth() {
     'Health: <b style="color:' + c + '">' + v + '</b>/100 <span class="pill" style="background:' + c + '">' +
     healthLabel(v) + '</span> <span style="color:#bbb">· E2+-Bugs: <b>' + bugs + '</b></span>';
 }
+function provOf(x) { const p = String(x.provenance || x.provenienz || '').trim(); return p || 'regel'; }
 function render() {
   const lv = document.getElementById('f-level').value;
   const cat = document.getElementById('f-cat').value;
@@ -352,8 +402,9 @@ function render() {
     el.innerHTML =
       '<div class="title"><span class="badge">' + x.evidence + '</span> <b>' + esc(x.id) + '</b>' +
       ' <span class="rule">' + esc(x.rule_id) + '</span> <span class="cwe">' + esc(x.cwe) + '</span>' +
+      ' <span class="prov" title="Provenienz: was hat erkannt (Regel-Engine, Modellname oder Triage-Stufe)">⛨ ' + esc(provOf(x)) + '</span>' +
       (deny ? '<span class="deny-note">Deny-List</span>' : '') + '</div>' +
-      '<div class="meta">' + esc(x.file) + ':' + (x.start_line || '?') + ' · ' + esc(x.category) + '</div>' +
+      '<div class="meta">' + esc(x.file) + ':' + (x.start_line || '?') + ' · ' + esc(x.category) + ' · Provenienz: ' + esc(provOf(x)) + '</div>' +
       '<div class="details"><p class="msg">' + esc(x.message) + '</p>' +
       '<div class="actions">' +
         '<button data-act="confirm">Bestätigen</button>' +
@@ -412,79 +463,71 @@ function renderModuleGraph() {
     return;
   }
   const ids = new Set(nodes.map(n => n.id));
-  const incoming = new Map(nodes.map(n => [n.id, 0]));
-  for (const e of edges) { if (ids.has(e.from) && ids.has(e.to)) incoming.set(e.to, (incoming.get(e.to) || 0) + 1); }
-  const out = new Map(nodes.map(n => [n.id, []]));
-  for (const e of edges) { if (out.has(e.from) && ids.has(e.to)) out.get(e.from).push(e.to); }
-  const depth = new Map();
-  const queue = nodes.filter(n => (incoming.get(n.id) || 0) === 0).map(n => n.id);
-  for (const id of queue) depth.set(id, 0);
-  for (let i = 0; i < queue.length; i++) {
-    for (const t of out.get(queue[i]) || []) {
-      if (!depth.has(t)) { depth.set(t, depth.get(queue[i]) + 1); queue.push(t); }
-    }
-  }
-  let maxD = 0;
-  for (const d of depth.values()) maxD = Math.max(maxD, d);
-  for (const n of nodes) if (!depth.has(n.id)) depth.set(n.id, maxD + 1);
-  for (const d of depth.values()) maxD = Math.max(maxD, d);
   const MAXN = 60;
   const shown = nodes.slice(0, MAXN);
   const shownSet = new Set(shown.map(n => n.id));
-  const BW = 176, BH = 46, GAPX = 60, GAPY = 16, PAD = 12;
+  // Radial-Handlayout: Zentrum = Projektmitte, Module kreisfoermig darum.
+  // Radius waechst mit Modulzahl; Kanten = Kurven (quadratisch via Zentrum-Offset).
+  let gZoom = (typeof gZoomV === 'number' && gZoomV > 0) ? gZoomV : 1;
+  const N = shown.length;
+  const R = Math.max(150, N * 10);
+  const CX = R + 110, CY = R + 80;
+  const W = (CX + R + 120), H = (CY + R + 90);
   const pos = new Map();
-  const byDepth = new Map();
-  for (const n of nodes) { const d = depth.get(n.id); if (!byDepth.has(d)) byDepth.set(d, []); byDepth.get(d).push(n); }
-  for (const d of [...byDepth.keys()].sort((a, b) => a - b)) {
-    byDepth.get(d).filter(n => shownSet.has(n.id)).forEach((n, i) => {
-      pos.set(n.id, { x: PAD + d * (BW + GAPX), y: PAD + i * (BH + GAPY) });
-    });
+  shown.forEach((n, i) => {
+    // Hand-Jitter statt starrer Kreisform (deterministisch, ueberlappungsarm):
+    const a = (2 * Math.PI * i) / Math.max(1, N) - Math.PI / 2;
+    const rr = R + ((i * 37) % 23) - 11;
+    pos.set(n.id, { x: CX + rr * Math.cos(a), y: CY + rr * Math.sin(a) });
+  });
+  pos.set('__mitte__', { x: CX, y: CY });
+  function edgePath(a, b) {
+    // Kurve uebers Zentrum abgeschwaecht: Kontrollpunkt = Mitte zwischen a/b,
+    // zum Zentrum gezogen -> sichtbare Boegen statt Geraden.
+    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+    const qx = mx + (CX - mx) * 0.35, qy = my + (CY - my) * 0.35;
+    return 'M ' + a.x.toFixed(1) + ' ' + a.y.toFixed(1) + ' Q ' + qx.toFixed(1) + ' ' + qy.toFixed(1) + ' ' + b.x.toFixed(1) + ' ' + b.y.toFixed(1);
   }
-  let h = BH + 2 * PAD;
-  for (const p of pos.values()) h = Math.max(h, p.y + BH + PAD);
-  const w = PAD + (maxD + 1) * (BW + GAPX);
-  const TINT = { green: '#e9f5ec', yellow: '#fdf3d7', red: '#fdecec' };
-  let s = '<svg width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '" role="img">' +
+  const vbW = (W / gZoom), vbH = (H / gZoom);
+  const vbX = CX - vbW / 2, vbY = CY - vbH / 2;
+  let s = '<svg width="100%" height="' + Math.min(620, Math.max(320, H * gZoom > 620 ? 620 : H)) + '" viewBox="' + vbX.toFixed(1) + ' ' + vbY.toFixed(1) + ' ' + vbW.toFixed(1) + ' ' + vbH.toFixed(1) + '" role="img">' +
     '<defs><marker id="g-arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">' +
     '<path d="M 0 1 L 9 5 L 0 9 z" fill="#8a8a86"></path></marker></defs>';
-  // Kanten-Fächerung (reine Geometrie): Ports je Quell-/Zielknoten vertikal spreizen
-  // und als Kurve zeichnen, damit sich Kanten an zentralen Knoten nicht überlagern.
-  const drawEdges = edges.filter(e => pos.get(e.from) && pos.get(e.to));
-  const outTotE = new Map(), inTotE = new Map();
-  for (const e of drawEdges) {
-    outTotE.set(e.from, (outTotE.get(e.from) || 0) + 1);
-    inTotE.set(e.to, (inTotE.get(e.to) || 0) + 1);
+  // Speichen Zentrum -> Modul (dezent), damit radiale Struktur lesbar bleibt.
+  for (const n of shown) {
+    const p = pos.get(n.id);
+    s += '<path d="' + edgePath(pos.get('__mitte__'), p) + '" fill="none" stroke="#c9c9c4" stroke-width="1" stroke-dasharray="4 4" opacity="0.7"><title>Projektmitte → ' + esc(n.id) + '</title></path>';
   }
-  const outSeq = new Map(), inSeq = new Map();
-  for (const e of drawEdges) {
+  // Echte Abhaengigkeitskanten als Kurven zwischen Modulen.
+  const drawEdges = edges.filter(e => pos.get(e.from) && pos.get(e.to) && e.from !== '__mitte__');
+  for (const e of drawEdges.slice(0, 400)) {
     const a = pos.get(e.from), b = pos.get(e.to);
-    const no = outTotE.get(e.from), ni = inTotE.get(e.to);
-    const oi = outSeq.get(e.from) || 0; outSeq.set(e.from, oi + 1);
-    const ii = inSeq.get(e.to) || 0; inSeq.set(e.to, ii + 1);
-    const y1 = a.y + BH / 2 + (no > 1 ? (oi / (no - 1) - 0.5) * (BH - 16) : 0);
-    const y2 = b.y + BH / 2 + (ni > 1 ? (ii / (ni - 1) - 0.5) * (BH - 16) : 0);
-    const x1 = a.x + BW, x2 = b.x - 4;
-    const dx = Math.max(24, (x2 - x1) / 2);
-    s += '<path d="M ' + x1 + ' ' + y1.toFixed(1) + ' C ' + (x1 + dx).toFixed(1) + ' ' + y1.toFixed(1) +
-      ', ' + (x2 - dx).toFixed(1) + ' ' + y2.toFixed(1) + ', ' + x2 + ' ' + y2.toFixed(1) +
-      '" fill="none" stroke="#8a8a86" stroke-width="1.5" marker-end="url(#g-arr)"><title>' + esc(e.from) + ' → ' + esc(e.to) + '</title></path>';
+    s += '<path d="' + edgePath(a, b) + '" fill="none" stroke="#8a8a86" stroke-width="1.5" marker-end="url(#g-arr)" opacity="0.85"><title>' + esc(e.from) + ' → ' + esc(e.to) + '</title></path>';
   }
+  // Zentralknoten Projektmitte.
+  s += '<g class="g-node" data-gi="-1" tabindex="0" role="button" aria-current="' + (gSel === '__mitte__') + '" aria-label="Projektmitte, ' + N + ' Module">' +
+    '<circle class="halo" cx="' + CX + '" cy="' + CY + '" r="34" fill="#141414" stroke="#141414" stroke-width="2"></circle>' +
+    '<text x="' + CX + '" y="' + (CY + 1) + '" font-size="11" font-weight="700" fill="#fff" text-anchor="middle">◉ ' + N + '</text>' +
+    '<text x="' + CX + '" y="' + (CY + 48) + '" font-size="11" fill="#555" text-anchor="middle">Projektmitte</text></g>';
   for (let gi = 0; gi < shown.length; gi++) {
     const n = shown[gi];
     const p = pos.get(n.id);
     const col = gColOf(n);
     const hex = gHex(col);
     const tint = gTint(col);
-    const label = String(n.id).length > 26 ? String(n.id).slice(0, 25) + '…' : String(n.id);
+    const short = String(n.id).split('/').pop();
+    const label = short.length > 14 ? short.slice(0, 13) + '…' : short;
     s += '<g class="g-node" data-gi="' + gi + '" tabindex="0" role="button" aria-current="' + (gSel === n.id) + '" aria-label="Modul ' + esc(n.id) + ', Health ' + esc(n.health == null ? '–' : n.health) + ' (' + col + ')"><title>' + esc(n.id) + ' · Health ' + esc(n.health == null ? '–' : n.health) + ' (' + col + ')</title>' +
-      '<rect x="' + p.x + '" y="' + p.y + '" width="' + BW + '" height="' + BH + '" rx="6" fill="' + tint + '" stroke="' + hex + '" stroke-width="2"></rect>' +
-      '<text x="' + (p.x + 10) + '" y="' + (p.y + 19) + '" font-size="11.5" font-weight="700" fill="#1b1b1b"><title>' + esc(n.id) + '</title>' + esc(label) + '</text>' +
-      '<text x="' + (p.x + 10) + '" y="' + (p.y + 36) + '" font-size="11" fill="' + hex + '">Health ' + esc(n.health ?? '–') + ' · ' + col + '</text></g>';
+      '<circle class="halo" cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) + '" r="17" fill="' + tint + '" stroke="' + hex + '" stroke-width="2.5"></circle>' +
+      '<text x="' + p.x.toFixed(1) + '" y="' + (p.y + 30).toFixed(1) + '" font-size="10.5" font-weight="700" fill="#1b1b1b" text-anchor="middle">' + esc(label) + '</text>' +
+      '<text x="' + p.x.toFixed(1) + '" y="' + (p.y + 42).toFixed(1) + '" font-size="10" fill="' + hex + '" text-anchor="middle">' + esc(n.health ?? '–') + '</text></g>';
   }
   s += '</svg>';
   box.innerHTML = s;
   gShown = shown;
-  if (gSel && !shownSet.has(gSel)) { gSel = null; document.getElementById('g-detail').innerHTML = ''; }
+  const zl = document.getElementById('g-zoom-label');
+  if (zl) zl.textContent = 'Zoom ' + Math.round(gZoom * 100) + '% · ' + N + ' Module radial';
+  if (gSel && gSel !== '__mitte__' && !shownSet.has(gSel)) { gSel = null; document.getElementById('g-detail').innerHTML = ''; }
   const adj = new Map(nodes.map(n => [n.id, []]));
   for (const e of edges) { if (adj.has(e.from) && ids.has(e.to)) adj.get(e.from).push(e.to); }
   let rows = '';
@@ -501,6 +544,14 @@ function renderModuleGraph() {
 }
 function showGraphDetail(id) {
   const det = document.getElementById('g-detail');
+  if (id === '__mitte__' || id === 'mitte') {
+    gSel = '__mitte__';
+    const n = (modgraph.nodes || []).length, e = (modgraph.edges || []).length;
+    det.innerHTML = '<div class="g-d" role="status"><b class="t">Projektmitte</b> ' +
+      '<div class="row">' + n + ' Module · ' + e + ' Kanten · Quelle: ' + esc(graphSrc) + '</div>' +
+      '<div class="row">Modelle: Erster=' + esc(models.first) + ' · Deep=' + esc(models.deep) + '</div></div>';
+    box_markSel(); return;
+  }
   const n = (modgraph.nodes || []).find(x => x && x.id === id);
   if (!n) { det.innerHTML = ''; gSel = null; return; }
   gSel = id;
@@ -519,19 +570,57 @@ function showGraphDetail(id) {
 function box_markSel() {
   const box = document.getElementById('g-svg');
   box.querySelectorAll('.g-node').forEach(g => {
-    const n = gShown[+g.getAttribute('data-gi')];
+    const gi = +g.getAttribute('data-gi');
+    const n = gi < 0 ? { id: '__mitte__' } : gShown[gi];
     g.setAttribute('aria-current', n && gSel === n.id ? 'true' : 'false');
   });
 }
+let gZoomV = 1;
+function gZoomBy(f) { gZoomV = Math.min(3, Math.max(0.4, +(gZoomV * f).toFixed(2))); renderModuleGraph(); }
+document.getElementById('g-zoom-in').addEventListener('click', () => gZoomBy(1.25));
+document.getElementById('g-zoom-out').addEventListener('click', () => gZoomBy(0.8));
+document.getElementById('g-zoom-reset').addEventListener('click', () => { gZoomV = 1; renderModuleGraph(); });
+async function rescan() {
+  const st = document.getElementById('rescan-status');
+  const btn = document.getElementById('rescan');
+  st.className = 'busy'; st.textContent = 'Scanne … (Erster=' + models.first + ', Deep=' + models.deep + ')';
+  if (btn) btn.disabled = true;
+  logAudit('RESCAN gestartet (Erster=' + models.first + ', Deep=' + models.deep + ')');
+  // 1) Tauri-Command versuchen (rescan > scan > refresh), mit Modell-Parametern.
+  const params = { first: models.first, deep: models.deep };
+  let used = '';
+  for (const cmd of ['rescan', 'scan', 'refresh', 'run_scan']) {
+    try { await invoke(cmd, params); used = cmd; break; } catch (e) { /* naechster */ }
+  }
+  try {
+    // 2) Daten neu laden (Re-Invoke + Reload der Listen/Graph/Health).
+    await load();
+    st.className = 'done';
+    st.textContent = used ? '✓ Scan neu angestossen via „' + used + '“, Daten neu geladen.' : '✓ Daten neu geladen (kein Scan-Command — Fallback Re-Invoke).';
+    logAudit('RESCAN fertig (' + (used ? 'Command ' + used : 'Re-Invoke-Fallback') + ')');
+  } catch (e) {
+    st.className = 'err'; st.textContent = '✗ Rescan fehlgeschlagen: ' + e.message;
+    logAudit('RESCAN FEHLER: ' + e.message);
+  }
+  if (btn) btn.disabled = false;
+}
+document.getElementById('rescan').addEventListener('click', rescan);
+for (const [id, which] of [['m-first', 'first'], ['m-deep', 'deep'], ['set-first', 'first'], ['set-deep', 'deep']]) {
+  document.getElementById(id).addEventListener('change', e => setModel(which, e.target.value));
+}
 document.getElementById('g-svg').addEventListener('click', e => {
   const g = e.target.closest('.g-node'); if (!g) return;
-  const n = gShown[+g.getAttribute('data-gi')]; if (n) showGraphDetail(n.id);
+  const gi = +g.getAttribute('data-gi');
+  if (gi < 0) { showGraphDetail('__mitte__'); return; }
+  const n = gShown[gi]; if (n) showGraphDetail(n.id);
 });
 document.getElementById('g-svg').addEventListener('keydown', e => {
   if (e.key !== 'Enter' && e.key !== ' ') return;
   const g = e.target.closest('.g-node'); if (!g) return;
   e.preventDefault();
-  const n = gShown[+g.getAttribute('data-gi')]; if (n) showGraphDetail(n.id);
+  const gi = +g.getAttribute('data-gi');
+  if (gi < 0) { showGraphDetail('__mitte__'); return; }
+  const n = gShown[gi]; if (n) showGraphDetail(n.id);
 });
 document.getElementById('g-detail').addEventListener('click', e => {
   const b = e.target.closest('[data-goto]'); if (!b) return;
@@ -658,6 +747,7 @@ document.getElementById('approved-cats').addEventListener('change', e => {
   logAudit('KATEGORIE ' + c + ' ' + (e.target.checked ? 'GENEHMIGT' : 'ENTZOGEN'));
 });
 document.getElementById('audit-clear').addEventListener('click', () => { audit = []; saveAudit(); renderAudit(); });
+syncModelSelects();
 load().catch(err => { document.getElementById('list').textContent = 'Fehler: ' + err; });
 </script>
 </body>
