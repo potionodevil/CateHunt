@@ -1,0 +1,169 @@
+/* CateHunt Design-Token-Vorschlag — abgeleitet aus HermesHarness (Cate).
+ * Quellen (nur gelesen, Stand Okt 2026):
+ *   E:/HermesHarness/src/theme.css  (6 Themes, Spacing/Radius/Typo/Shadows)
+ *   E:/HermesHarness/tailwind.config.js (Variablen-Brücke), components.json (shadcn, neutral, cssVariables)
+ *   E:/HermesHarness/assets/palette.mjs (Pet-/Mockup-Palette, NICHT UI-Chrome)
+ * Status: aktiv — eingebunden via <link> in ui/dist/index.html
+ * (href="../catehunt-tokens.css"). Severity --e0..--e4 hier kanonisch,
+ * ui/dist/index.html nutzt sie + Alias-Mapping (keine Duplikat-Farbwerte).
+
+/* ============ 1. Basis (theme-unabhängig, aus theme.css :root) ============ */
+:root {
+  /* Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  /* Radius (CateHunt heute: --radius: 8px → entspricht --radius-md neu) */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  /* Typografie */
+  --font-sans: "Hanken Grotesk Variable", "Inter", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "Geist Mono Variable", "JetBrains Mono", "Fira Code", "Cascadia Mono", Consolas, monospace;
+  --font-brand: "Silkscreen", "Pixelify Sans", "Cascadia Mono", monospace;
+  --text-xs: 11px;
+  --text-sm: 12.5px;
+  --text-md: 13.5px;
+  --text-lg: 16px;
+  --text-xl: 22px;
+  /* Motion */
+  --ease-standard: cubic-bezier(0.22, 1, 0.36, 1);
+  --duration-fast: 120ms;
+  --duration-normal: 220ms;
+  --duration-slow: 350ms;
+  --motion-fade-distance: 6px;
+  /* Elevation */
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.16);
+  --shadow-2: 0 2px 8px rgba(0, 0, 0, 0.22);
+  --surface-shadow: inset 0 1px 0 var(--surface-ring, rgba(255,255,255,0.03)), 0 1px 2px rgba(0, 0, 0, 0.35);
+  --focus-ring-color: var(--accent);
+}
+
+/* ============ 2. Dark-Default "nous" (Empfehlung für CateHunt) ============ */
+:root,
+[data-theme="nous"] {
+  --bg-primary: #0b0b0f;
+  --bg-elevated: #111116;
+  --bg-elevated-2: #17171d;
+  --bg-hover: #1e1e26;
+  --bg-active: #272730;
+  --border: #24242c;
+  --border-strong: #363642;
+  --text-primary: #f0eff4;
+  --text-secondary: #aaaab6;
+  --text-muted: #868693;
+  --accent: #f2985c;
+  --accent-hover: #ffb27d;
+  --accent-ink: #1d1006;
+  --accent-dim: rgba(242,152,92,0.14);
+  --accent-glow: rgba(242,152,92,0.40);
+  --success: #62c48c;
+  --warning: #dcaa48;
+  --danger: #ec6c64;
+  --danger-dim: rgba(236,108,100,0.14);
+  --status-high: #f2985c;
+  --surface-ring: rgba(255,255,255,0.04);
+}
+
+/* ============ 3. Light-Theme "daylight" (passt zu CateHunt heute) ============ */
+[data-theme="daylight"] {
+  --bg-primary: #f5f0e6;
+  --bg-elevated: #fffdf8;
+  --bg-elevated-2: #efe8d9;
+  --bg-hover: #e6dec9;
+  --bg-active: #dcd2b8;
+  --border: #ded5be;
+  --border-strong: #c3b697;
+  --text-primary: #26211a;
+  --text-secondary: #574f41;
+  --text-muted: #6b6252;
+  --accent: #c2571a;
+  --accent-hover: #a34612;
+  --accent-ink: #fff6ea;
+  --accent-dim: rgba(194,87,26,0.13);
+  --accent-glow: rgba(194,87,26,0.28);
+  --success: #33803f;
+  --warning: #92600f;
+  --danger: #bd3b30;
+  --danger-dim: rgba(189,59,48,0.12);
+  --status-high: #c2571a;
+  --surface-ring: rgba(255,255,255,0.7);
+}
+
+/* ============ 4. Optionale Alternativ-Themes (aus themes.ts-Katalog) ============ */
+[data-theme="obsidian"] { /* Mitternacht, blauer Akzent */
+  --bg-primary: #090d19; --bg-elevated: #0f1424; --bg-elevated-2: #151b30;
+  --bg-hover: #1c2440; --bg-active: #252f52;
+  --border: #1f2845; --border-strong: #33406a;
+  --text-primary: #e9eefc; --text-secondary: #a3afd0; --text-muted: #8190b8;
+  --accent: #72a8ff; --accent-hover: #9cc1ff; --accent-ink: #06142e;
+  --accent-dim: rgba(114,168,255,0.15); --accent-glow: rgba(114,168,255,0.40);
+  --success: #67d0a0; --warning: #e0b85a; --danger: #f0707a;
+  --danger-dim: rgba(240,112,122,0.14); --status-high: #72a8ff;
+  --surface-ring: rgba(255,255,255,0.04);
+}
+[data-theme="slate"] { /* Moos, mint Akzent */
+  --bg-primary: #0a1210; --bg-elevated: #0f1a17; --bg-elevated-2: #15231f;
+  --bg-hover: #1c2e29; --bg-active: #243a34;
+  --border: #1e302b; --border-strong: #305148;
+  --text-primary: #e6f4ef; --text-secondary: #9bbab0; --text-muted: #7fa095;
+  --accent: #4fd6b0; --accent-hover: #7ae8c9; --accent-ink: #04201a;
+  --accent-dim: rgba(79,214,176,0.15); --accent-glow: rgba(79,214,176,0.38);
+  --success: #7fdc8e; --warning: #dcb458; --danger: #ee7468;
+  --danger-dim: rgba(238,116,104,0.14); --status-high: #4fd6b0;
+  --surface-ring: rgba(255,255,255,0.04);
+}
+[data-theme="copper"] { /* Kupfer, Pet-Orange-nah */
+  --bg-primary: #170f0d; --bg-elevated: #1f1512; --bg-elevated-2: #291c18;
+  --bg-hover: #33231e; --bg-active: #3e2b24;
+  --border: #35251f; --border-strong: #53392f;
+  --text-primary: #f6e9e2; --text-secondary: #c4a99c; --text-muted: #a48b7e;
+  --accent: #ee8a5e; --accent-hover: #ffa27a; --accent-ink: #2a1208;
+  --accent-dim: rgba(238,138,94,0.16); --accent-glow: rgba(238,138,94,0.38);
+  --success: #80c895; --warning: #e0a95e; --danger: #ec7064;
+  --danger-dim: rgba(236,112,100,0.14); --status-high: #ee8a5e;
+  --surface-ring: rgba(255,255,255,0.04);
+}
+[data-theme="aurora"] { /* Neon, pink Akzent */
+  --bg-primary: #0f0b1a; --bg-elevated: #161024; --bg-elevated-2: #1d1630;
+  --bg-hover: #261d3f; --bg-active: #30244f;
+  --border: #2a2044; --border-strong: #443368;
+  --text-primary: #f3edfb; --text-secondary: #b8a8d4; --text-muted: #9686b8;
+  --accent: #ff6fb1; --accent-hover: #ff93c6; --accent-ink: #2a0618;
+  --accent-dim: rgba(255,111,177,0.15); --accent-glow: rgba(255,111,177,0.40);
+  --success: #6fe0b4; --warning: #f0c768; --danger: #ff7a7a;
+  --danger-dim: rgba(255,122,122,0.14); --status-high: #ff6fb1;
+  --surface-ring: rgba(255,255,255,0.04);
+}
+
+/* ============ 5. CateHunt-Mapping (bestehende Severity-Tokens bleiben) ============ */
+/* Severity: aus ui/dist/index.html übernommen, theme-unabhängig (Evidenz-Farben). */
+:root {
+  --e0: #6e6e6e; --e1: #b98a00; --e2: #d96c00; --e3: #c81e1e; --e4: #1e7e34;
+  --e3-bg: #fdecec; --e4-bg: #e9f5ec; --e0-bg: #f1f1ef;
+}
+/* color-scheme je Theme (Default nous = dark). */
+:root, [data-theme="nous"] { color-scheme: dark; }
+[data-theme="daylight"] { color-scheme: light; }
+
+/* ============ 6. Motion / reduced-motion ============ */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+/* --e0..--e4/--e3-bg/--e4-bg/--e0-bg aus index.html unverändert lassen.
+ * Empfohlene Umstellung bestehender Vars:
+ *   --ink    → var(--text-primary)     --muted → var(--text-secondary)
+ *   --faint  → var(--text-muted)       --line  → var(--border)
+ *   --panel  → var(--bg-elevated)      --wash  → var(--bg-primary)
+ *   --focus  → var(--accent)           --radius → var(--radius-md)
+ *   --font   → var(--font-sans)        --mono  → var(--font-mono)
+ * Pet-Palette (palette.mjs) NICHT für UI-Chrome nutzen — nur falls CateHunt
+ * je ein Maskottchen/Avatar braucht: ACCENT #e08a4c, Mockup-Preset Cate
+ * (fell #f1ede6 / outline #3a3a48 / eyes #1a1a22). */

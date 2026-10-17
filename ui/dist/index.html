@@ -6,36 +6,48 @@
 <!-- (2) data-act/data-ed-Attribute sind Code-Bezeichner und bleiben Englisch. (3) Nach Änderung: Datei im Browser -->
 <!-- oder via Tauri laden und per Audit-Log-Gegenprobe testen. (4) Fixtures unter fixtures/*.json spiegeln das -->
 <!-- Backend-Format. (5) Keine Secrets einbetten — statisch, offline, keine Netz-Calls. -->
-<html lang="de">
+<html lang="de" data-theme="nous">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP4z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==">
+<link rel="icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAl0lEQVR4nGNgYGBgUFbW/A/CDEQCZPVMMMGjteVgCWI0g9TCAAuyJEjCurkTryHImkGAEdnkS2d3E+UFPWNXhrt3rzOieIFcwER1A7y2tIExseJM2Ew937aJKDHaB+Lp4GIwxgeYcEn8PXEHKxunAXfvXmcEOY0U52OkRAYkwGyhwmC6tpeggSheIOQKdNtxuoAYr1ANAACF1UG1Wa7yswAAAABJRU5ErkJggg==">
 <title>CateHunt — Review-Workbench</title>
+<link rel="stylesheet" href="./catehunt-tokens.css">
 <style>
   :root {
-    color-scheme: light;
-    --e0: #6e6e6e; --e1: #b98a00; --e2: #d96c00; --e3: #c81e1e; --e4: #1e7e34;
-    --e3-bg: #fdecec; --e4-bg: #e9f5ec; --e0-bg: #f1f1ef;
-    --ink: #1b1b1b; --muted: #555; --faint: #777;
-    --line: #dcdcd8; --panel: #fff; --wash: #f4f4f1;
-    --focus: #0b5ed7;
-    --radius: 8px; --gap: 10px;
-    --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-    --mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+    /* Severity kommt aus catehunt-tokens.css (--e0..--e4 + --e0-bg/--e3-bg/--e4-bg). */
+    /* Lokale Aliase mappen alte Namen auf Token-Variablen (keine Duplikat-Farbwerte). */
+    --ink: var(--text-primary); --muted: var(--text-secondary); --faint: var(--text-muted);
+    --line: var(--border); --panel: var(--bg-elevated); --wash: var(--bg-primary);
+    --focus: var(--accent);
+    --radius: var(--radius-md); --gap: 10px;
+    --font: var(--font-sans);
+    --mono: var(--font-mono);
   }
   * { box-sizing: border-box; }
   body { font-family: var(--font); margin: 0; background: var(--wash); color: var(--ink); font-size: 14px; line-height: 1.45; }
-  header.op { background: #141414; color: #fff; padding: 0 16px; display: flex; gap: 14px; align-items: center; min-height: 52px; position: sticky; top: 0; z-index: 10; flex-wrap: wrap; }
-  header.op h1 { font-size: 15px; margin: 0; white-space: nowrap; }
-  header.op h1 .sub { font-weight: 400; color: #bbb; font-size: 12px; margin-left: 6px; }
+  header.op { background: #141414; color: #fff; padding: 8px 16px; display: grid; grid-template-columns: 1fr auto 1fr; gap: 8px 14px; align-items: center; position: sticky; top: 0; z-index: 10; }
+  /* Zone 1 (links): Breadcrumb */
+  .crumbs { display: flex; gap: 8px; align-items: baseline; min-width: 0; font-size: 15px; font-weight: 700; white-space: nowrap; }
+  .crumbs .sep { color: #888; font-weight: 400; }
+  .crumbs #crumb-view { color: var(--accent, #E8A15E); }
+  .crumbs .sub { font-weight: 400; color: #bbb; font-size: 12px; overflow: hidden; text-overflow: ellipsis; }
+  /* Zone 2 (Mitte): Command-Palette-Trigger */
+  .hcenter { display: flex; justify-content: center; }
+  /* Zone 3 (rechts): Status */
+  .hright { display: flex; gap: 10px; align-items: center; justify-content: flex-end; }
+  @media (max-width: 760px) { header.op { grid-template-columns: 1fr auto; } .hcenter { display: none; } }
   #health { font-size: 13px; color: #e8e8e8; white-space: nowrap; }
   #health b { font-size: 18px; font-variant-numeric: tabular-nums; }
-  #health .pill { display: inline-block; font-size: 11px; font-weight: 700; border-radius: 20px; padding: 1px 9px; margin-left: 8px; vertical-align: 2px; }
-  nav.tabs { display: flex; gap: 2px; margin-left: auto; }
-  nav.tabs button { background: transparent; color: #cfcfcf; border: 0; border-bottom: 3px solid transparent; border-radius: 0; padding: 14px 12px 11px; font-size: 13px; min-height: 0; min-width: 0; }
-  nav.tabs button:hover { background: #242424; color: #fff; border-color: transparent; }
-  nav.tabs button[aria-selected="true"] { background: transparent; color: #fff; border-bottom-color: var(--e2); font-weight: 700; }
+  #health .pill { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; border-radius: 999px; padding: 2px 11px; margin-left: 8px; vertical-align: 2px; color: #fff; }
+  #health .pill .pdot { width: 8px; height: 8px; border-radius: 50%; background: #fff; flex: none; }
+  #theme-toggle { background: transparent; color: #e8e8e8; border: 1px solid #444; border-radius: 6px; min-height: 32px; white-space: nowrap; }
+  #theme-toggle:hover { background: #242424; color: #fff; border-color: #666; }
+  /* Tabs als Segmented-Pills: Container + aktiver Pill (Pfirsich) */
+  nav.tabs { display: flex; gap: 4px; margin: 0; grid-column: 1 / -1; justify-self: center; background: #242424; border: 1px solid #3a3a3a; border-radius: 999px; padding: 3px; }
+  nav.tabs button { background: transparent; color: #cfcfcf; border: 0; border-radius: 999px; padding: 6px 16px; font-size: 13px; min-height: 32px; min-width: 0; }
+  nav.tabs button:hover { background: #333; color: #fff; border-color: transparent; }
+  nav.tabs button[aria-selected="true"] { background: #E8A15E; color: #2a1607; font-weight: 700; }
   main { max-width: 1080px; margin: 0 auto; padding: 14px 16px 40px; }
   .view { display: none; }
   .view.active { display: block; }
@@ -48,23 +60,29 @@
   .finding.E0 { border-left-color: var(--e0); background: var(--e0-bg); }
   .finding.E0 .details { display: none; }
   .finding.E0.open .details { display: block; }
-  .finding .title { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; font-size: 13.5px; }
-  .finding .title .rule { font-family: var(--mono); font-size: 12px; color: var(--muted); }
-  .badge { display: inline-block; font-weight: 700; font-size: 11px; border-radius: 4px; padding: 1px 7px; color: #fff; flex: none; }
+  .finding .title { display: flex; gap: 8px; align-items: baseline; flex-wrap: nowrap; font-size: 13.5px; min-width: 0; }
+  .finding .title b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; max-width: 30ch; }
+  .finding .title .rule { font-family: var(--mono); font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; max-width: 34ch; flex: none; }
+  /* Status-Pills: vollrund mit Dot (Severity-Farben E0–E4 bleiben) */
+  .badge { display: inline-flex; align-items: center; gap: 5px; font-weight: 700; font-size: 11px; border-radius: 999px; padding: 1px 9px 1px 7px; color: #fff; flex: none; }
+  .badge::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: rgba(255,255,255,.92); flex: none; }
   .E3 .badge { background: var(--e3); }
   .E2 .badge { background: var(--e2); }
   .E1 .badge { background: #8a6d00; } /* abgedunkelt: Kontrast auf Weiss */
   .E4 .badge { background: var(--e4); }
   .E0 .badge { background: var(--e0); }
-  .cwe { font-size: 11px; font-weight: 700; border: 1px solid currentColor; border-radius: 4px; padding: 0 6px; }
+  .cwe { font-size: 11px; font-weight: 700; border: 1px solid currentColor; border-radius: 999px; padding: 0 8px; white-space: nowrap; }
   .E3 .cwe { color: var(--e3); } .E2 .cwe { color: var(--e2); } .E1 .cwe { color: #8a6d00; }
   .E4 .cwe { color: var(--e4); } .E0 .cwe { color: var(--e0); }
-  .meta { font-size: 12px; color: var(--muted); font-family: var(--mono); margin-top: 2px; }
+  .meta { font-size: 12px; color: var(--muted); font-family: var(--mono); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .msg { font-size: 13px; margin: 6px 0 0; }
   .actions { margin-top: 7px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-  button { padding: 5px 12px; border-radius: 6px; border: 1px solid #bbb; cursor: pointer; background: #fff; min-height: 36px; min-width: 44px; font-size: 13px; }
-  button:hover:not(:disabled) { background: #eceff2; border-color: #888; }
+  /* Buttons: Default = Ghost, genau eine Primary (.btn-primary, Pfirsich #E8A15E) pro View */
+  button { padding: 5px 12px; border-radius: 6px; border: 1px solid var(--border-strong); cursor: pointer; background: var(--bg-elevated-2); color: var(--text-primary); min-height: 36px; min-width: 44px; font-size: 13px; }
+  button:hover:not(:disabled) { background: var(--bg-hover); border-color: var(--border-strong); }
   button:disabled { opacity: .45; cursor: not-allowed; }
+  button.btn-primary { background: #E8A15E; border-color: #E8A15E; color: #2a1607; font-weight: 700; }
+  button.btn-primary:hover:not(:disabled) { background: #f0b078; border-color: #f0b078; }
   :is(button, select, input, a, [tabindex]):focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
   button.danger-arm { background: var(--e3); color: #fff; border-color: var(--e3); font-weight: 700; }
   .finding.E0 > button[data-act="toggle"] { margin-top: 6px; min-height: 32px; font-size: 12px; }
@@ -76,10 +94,10 @@
   .deny-note { font-size: 12px; color: var(--e3); font-weight: 600; }
   .opbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 12px; margin: 2px 0 10px; }
   .opbar label { font-size: 12px; color: var(--muted); display: flex; gap: 6px; align-items: center; }
-  .opbar select { font-size: 13px; padding: 5px 8px; border: 1px solid #bbb; border-radius: 6px; background: #fff; min-height: 32px; }
+  .opbar select, .opbar input, select, input { font-size: 13px; padding: 5px 8px; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--bg-elevated-2); color: var(--text-primary); min-height: 32px; }
   #count { font-size: 12px; color: var(--muted); margin-left: auto; font-variant-numeric: tabular-nums; }
   #src-note, .g-meta { font-size: 11px; color: var(--faint); margin: 8px 2px; }
-  #g-svg { overflow-x: auto; border: 1px solid var(--line); border-radius: 6px; background: #fbfbfa; }
+  #g-svg { overflow-x: auto; border: 1px solid var(--line); border-radius: 6px; background: var(--bg-elevated); }
   #g-svg svg { display: block; }
   #g-svg svg text { font-family: var(--font); }
   #g-svg .g-node { cursor: pointer; }
@@ -87,17 +105,20 @@
   #g-svg .g-node[aria-current="true"] circle.halo { stroke-width: 4; }
   .g-controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 0 0 8px; }
   .g-controls button { min-height: 32px; font-size: 12.5px; }
-  .prov { font-size: 11px; font-weight: 700; border: 1px dashed currentColor; border-radius: 4px; padding: 0 6px; white-space: nowrap; }
+  .prov { font-size: 11px; font-weight: 700; border: 1px dashed currentColor; border-radius: 999px; padding: 0 8px; white-space: nowrap; flex: none; }
+  .cwe { flex: none; }
   #rescan-status { font-size: 12px; color: var(--muted); }
-  #rescan-status.busy { color: #0b5ed7; font-weight: 700; }
+  #rescan-status:not(:empty) { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 2px 11px; border: 1px solid var(--line); background: var(--panel); }
+  #rescan-status:not(:empty)::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex: none; }
+  #rescan-status.busy { color: var(--focus); font-weight: 700; }
   #rescan-status.done { color: #1e7e34; font-weight: 700; }
   #rescan-status.err { color: var(--e3); font-weight: 700; }
   #g-detail { margin-top: 8px; }
   #g-detail:empty { display: none; }
-  #g-detail .g-d { border: 1px solid var(--line); border-radius: 6px; background: #fff; padding: 8px 12px; font-size: 12.5px; }
+  #g-detail .g-d { border: 1px solid var(--line); border-radius: 6px; background: var(--bg-elevated); padding: 8px 12px; font-size: 12.5px; }
   #g-detail .g-d b.t { font-size: 13px; font-family: var(--mono); }
   #g-detail .g-d .row { margin: 3px 0; color: var(--muted); }
-  #g-detail .g-d button.link { background: none; border: 0; padding: 0 2px; margin: 0; min-height: 0; min-width: 0; color: #0b5ed7; font-family: var(--mono); font-size: 12px; text-decoration: underline; cursor: pointer; }
+  #g-detail .g-d button.link { background: none; border: 0; padding: 0 2px; margin: 0; min-height: 0; min-width: 0; color: var(--focus); font-family: var(--mono); font-size: 12px; text-decoration: underline; cursor: pointer; }
   #g-adj { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 10px; }
   #g-adj caption { text-align: left; font-size: 12px; color: var(--muted); padding-bottom: 6px; }
   #g-adj th, #g-adj td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
@@ -113,7 +134,7 @@
   @media (max-width: 640px) { .graph-grid { grid-template-columns: 1fr; } }
   .ring { --v: 72; --c: var(--e1); width: 132px; height: 132px; border-radius: 50%; display: grid; place-items: center; margin: 4px auto;
     background: conic-gradient(var(--c) calc(var(--v) * 1%), #e7e7e3 0); }
-  .ring .inner { width: 96px; height: 96px; border-radius: 50%; background: #fff; display: grid; place-items: center; text-align: center; }
+  .ring .inner { width: 96px; height: 96px; border-radius: 50%; background: var(--bg-elevated); display: grid; place-items: center; text-align: center; }
   .ring .inner b { font-size: 30px; font-variant-numeric: tabular-nums; line-height: 1; }
   .ring .inner span { font-size: 10px; color: var(--muted); }
   .legend { font-size: 12px; color: var(--muted); margin-top: 8px; text-align: center; }
@@ -144,14 +165,96 @@
   .switch input:checked + .track2 { background: #1e9e44; }
   .switch input:checked + .track2::after { left: 27px; }
   .switch input:focus-visible + .track2 { outline: 3px solid #1a73e8; outline-offset: 2px; }
-  #audit-log { font-size: 12px; max-height: 220px; overflow-y: auto; border: 1px solid #ddd; border-radius: 6px; padding: 8px; background: #fafafa; }
+  #audit-log { font-size: 12px; max-height: 220px; overflow-y: auto; border: 1px solid var(--line); border-radius: 6px; padding: 8px; background: var(--bg-elevated); }
   #audit-log li { margin: 2px 0; }
+  /* ---- Sprint 2: Filter-Pills (live + tastaturbedienbar) ---- */
+  .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .fgroup { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+  .fgroup .flabel { font-size: 12px; color: var(--muted, #555); margin-right: 2px; }
+  .fpill { border-radius: 999px; padding: 3px 12px; font-size: 12.5px; min-height: 30px; background: transparent; border: 1px solid var(--border-strong, #bbb); color: var(--muted, #555); }
+  .fpill:hover:not([aria-pressed="true"]) { color: var(--ink, #1b1b1b); }
+  .fpill[aria-pressed="true"] { background: #E8A15E; border-color: #E8A15E; color: #2a1607; font-weight: 700; }
+  /* ---- Sprint 2: Palette-Trigger (Header-Mitte) ---- */
+  #palette-trigger { display: inline-flex; gap: 8px; align-items: center; background: #242424; color: #cfcfcf; border: 1px solid #3a3a3a; border-radius: 8px; padding: 5px 12px; font-size: 12.5px; min-height: 32px; min-width: 240px; justify-content: space-between; }
+  #palette-trigger:hover { color: #fff; border-color: #555; background: #2c2c2c; }
+  #palette-trigger kbd { font-family: var(--mono); font-size: 11px; background: #333; border: 1px solid #4a4a4a; border-radius: 4px; padding: 0 6px; }
+  /* ---- Sprint 2: Command-Palette (zentriert, Akzent-Unterstrich, Voll-Fill-Select) ---- */
+  #palette-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 50; display: flex; justify-content: center; align-items: center; padding: 48px 16px; }
+  #palette-backdrop[hidden] { display: none; }
+  #palette { width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 96px); display: flex; flex-direction: column; background: var(--panel, #fff); color: var(--ink, #1b1b1b); border: 1px solid var(--line, #dcdcd8); border-radius: 12px; box-shadow: 0 12px 48px rgba(0,0,0,.4); overflow: hidden; }
+  #palette-input { width: 100%; border: 0; border-bottom: 3px solid #E8A15E; background: transparent; color: var(--ink, #1b1b1b); font-size: 15px; padding: 12px 16px 10px; outline: none; font-family: var(--font); }
+  #palette-input::placeholder { color: var(--faint, #777); }
+  #palette-list { list-style: none; margin: 0; padding: 6px; max-height: 320px; overflow-y: auto; background: var(--panel, #fff); }
+  #palette-list li { display: flex; gap: 10px; align-items: center; border-radius: 8px; padding: 8px 12px; font-size: 13.5px; cursor: pointer; }
+  #palette-list li .pk { font-family: var(--mono); font-size: 11px; color: var(--faint, #777); margin-left: auto; white-space: nowrap; }
+  #palette-list li.active { background: #E8A15E; color: #2a1607; font-weight: 700; }
+  #palette-list li.active .pk { color: #2a1607; }
+  #palette-empty { padding: 14px 16px; color: var(--muted, #555); font-size: 13px; background: var(--panel, #fff); }
+  #palette-empty[hidden] { display: none; }
+  #palette-hint { padding: 7px 16px; font-size: 11.5px; color: var(--faint, #777); border-top: 1px solid var(--line, #dcdcd8); background: var(--panel, #fff); }
+  /* Severity-Fallbacks (Werte = kanonisch E0–E4): greifen nur, wenn der Token-Link
+     nicht auflöst; bei geladenen Tokens gewinnen die Token-Werte. */
+  .finding.E3 { border-left-color: var(--e3, #c81e1e); }
+  .finding.E2 { border-left-color: var(--e2, #d96c00); }
+  .finding.E1 { border-left-color: var(--e1, #b98a00); }
+  .finding.E4 { border-left-color: var(--e4, #1e7e34); }
+  .finding.E0 { border-left-color: var(--e0, #6e6e6e); }
+  .E3 .badge { background: var(--e3, #c81e1e); }
+  .E2 .badge { background: var(--e2, #d96c00); }
+  .E1 .badge { background: var(--e1, #b98a00); }
+  .E4 .badge { background: var(--e4, #1e7e34); }
+  .E0 .badge { background: var(--e0, #6e6e6e); }
+</style>
+<style>
+/* Sprint 3 Maskottchen — CateHuntMark: 16x16-Pixel-Katzenkopf, EIGENE Neuzeichnung
+   (Ohren/Augen/Nase/Wangen im Raster, Akzent Jagd-Gruen #3fa46a). Sprite-Quelle:
+   src-tauri/icons/generate.py (MAP+Palette) -> Inline-SVG, shape-rendering crispEdges.
+   scoped Klassen (.cate-*) — keine Token-/Komponenten-Restyles. */
+.cate-mark { width: 30px; height: 30px; flex: none; image-rendering: pixelated; align-self: center; }
+.cate-empty { width: 56px; height: 56px; image-rendering: pixelated; margin-bottom: 6px; }
+#health-cat { width: 26px; height: 26px; flex: none; image-rendering: pixelated; }
+.cate-pix { shape-rendering: crispEdges; }
+.cate-shut, .cate-zzz { display: none; }
+/* 2) Empty-State-Katze (48-64px): Blinzeln alle ~4s via Augen-Skalierung. */
+.cate-blink .cate-eyes { transform-box: fill-box; transform-origin: center; animation: cate-blink 4.2s ease-in-out infinite; }
+@keyframes cate-blink { 0%, 91%, 100% { transform: scaleY(1); } 94.5% { transform: scaleY(.08); } }
+/* 3) Health-Begleiter: Schwanzwedeln nur bei E3; Schlaf (Schlupfaugen + Zzz) bei Health 100. */
+#health-cat.is-alert .cate-tail { transform-box: fill-box; transform-origin: 85% 15%; animation: cate-wag .45s ease-in-out infinite alternate; }
+@keyframes cate-wag { from { transform: rotate(-16deg); } to { transform: rotate(16deg); } }
+#health-cat.is-sleep .cate-eyes { display: none; }
+#health-cat.is-sleep .cate-shut { display: block; }
+#health-cat.is-sleep .cate-zzz { display: block; animation: cate-zzz 3s ease-in-out infinite; }
+@keyframes cate-zzz { 0% { opacity: 0; } 30% { opacity: 1; } 100% { opacity: 0; } }
+/* reduced-motion -> Standbild (verstaerkt die globale Regel gezielt). */
+@media (prefers-reduced-motion: reduce) {
+  .cate-blink .cate-eyes, #health-cat.is-alert .cate-tail, #health-cat.is-sleep .cate-zzz { animation: none !important; }
+}
 </style>
 </head>
 <body>
 <header class="op">
-  <h1>CateHunt <span class="sub">Review-Workbench · Evidence-Gate</span></h1>
+  <nav class="crumbs" aria-label="Breadcrumb"><svg class="cate-mark cate-pix" width="30" height="30" viewBox="0 0 16 16" shape-rendering="crispEdges" role="img" aria-label="CateHunt-Maskottchen (Pixel-Katzenkopf)">
+      <path d="M1 0h2v1h-2ZM13 0h2v1h-2ZM1 1h1v1h-1ZM3 1h1v1h-1ZM12 1h1v1h-1ZM14 1h1v1h-1ZM1 2h1v1h-1ZM4 2h8v1h-8ZM14 2h1v1h-1ZM2 3h1v1h-1ZM13 3h1v1h-1ZM2 4h1v1h-1ZM13 4h1v1h-1ZM2 5h1v1h-1ZM13 5h1v1h-1ZM2 6h1v1h-1ZM13 6h1v1h-1ZM2 7h1v1h-1ZM13 7h1v1h-1ZM2 8h1v1h-1ZM13 8h1v1h-1ZM2 9h1v1h-1ZM13 9h1v1h-1ZM2 10h1v1h-1ZM13 10h1v1h-1ZM3 11h1v1h-1ZM12 11h1v1h-1ZM3 12h1v1h-1ZM12 12h1v1h-1ZM4 13h1v1h-1ZM11 13h1v1h-1ZM4 14h8v1h-8Z" fill="#232329"/>
+      <path d="M3 3h10v1h-10ZM3 4h10v1h-10ZM3 5h10v1h-10ZM3 6h1v1h-1ZM6 6h4v1h-4ZM12 6h1v1h-1ZM3 7h1v1h-1ZM6 7h4v1h-4ZM12 7h1v1h-1ZM3 8h10v1h-10ZM3 9h4v1h-4ZM9 9h4v1h-4ZM3 10h3v1h-3ZM10 10h3v1h-3ZM4 11h2v1h-2ZM10 11h2v1h-2ZM4 12h8v1h-8ZM5 13h6v1h-6Z" fill="#f5f0e4"/>
+      <path d="M2 1h1v1h-1ZM13 1h1v1h-1ZM2 2h2v1h-2ZM12 2h2v1h-2Z" fill="#e8a0a0"/>
+      <path d="M7 9h2v1h-2ZM7 10h2v1h-2ZM7 11h2v1h-2Z" fill="#c04357"/>
+      <path d="M6 10h1v1h-1ZM9 10h1v1h-1ZM6 11h1v1h-1ZM9 11h1v1h-1Z" fill="#f2b8c0"/>
+      <g class="cate-eyes"><path d="M4 6h2v1h-2ZM10 6h2v1h-2ZM4 7h1v1h-1ZM11 7h1v1h-1Z" fill="#3fa46a"/><path d="M5 7h1v1h-1ZM10 7h1v1h-1Z" fill="#0e2a1c"/></g>
+    </svg><span class="brand">CateHunt</span><span class="sep" aria-hidden="true">›</span><span id="crumb-view">Review</span><span class="sub">Review-Workbench · Evidence-Gate</span></nav>
+  <div class="hcenter"><button id="palette-trigger" aria-haspopup="dialog" title="Command-Palette öffnen (Strg+K)">⌘ Aktionen suchen … <kbd>Strg K</kbd></button></div>
+  <div class="hright"><svg id="health-cat" class="cate-pix" width="26" height="26" viewBox="-4 0 20 16" shape-rendering="crispEdges" role="img" aria-label="Begleiter (Health)">
+      <path class="cate-tail" d="M-3 9h1v1h-1ZM-3 10h4v2h-4ZM-3 12h1v1h-1Z" fill="#3fa46a"/>
+      <path d="M1 0h2v1h-2ZM13 0h2v1h-2ZM1 1h1v1h-1ZM3 1h1v1h-1ZM12 1h1v1h-1ZM14 1h1v1h-1ZM1 2h1v1h-1ZM4 2h8v1h-8ZM14 2h1v1h-1ZM2 3h1v1h-1ZM13 3h1v1h-1ZM2 4h1v1h-1ZM13 4h1v1h-1ZM2 5h1v1h-1ZM13 5h1v1h-1ZM2 6h1v1h-1ZM13 6h1v1h-1ZM2 7h1v1h-1ZM13 7h1v1h-1ZM2 8h1v1h-1ZM13 8h1v1h-1ZM2 9h1v1h-1ZM13 9h1v1h-1ZM2 10h1v1h-1ZM13 10h1v1h-1ZM3 11h1v1h-1ZM12 11h1v1h-1ZM3 12h1v1h-1ZM12 12h1v1h-1ZM4 13h1v1h-1ZM11 13h1v1h-1ZM4 14h8v1h-8Z" fill="#232329"/>
+      <path d="M3 3h10v1h-10ZM3 4h10v1h-10ZM3 5h10v1h-10ZM3 6h1v1h-1ZM6 6h4v1h-4ZM12 6h1v1h-1ZM3 7h1v1h-1ZM6 7h4v1h-4ZM12 7h1v1h-1ZM3 8h10v1h-10ZM3 9h4v1h-4ZM9 9h4v1h-4ZM3 10h3v1h-3ZM10 10h3v1h-3ZM4 11h2v1h-2ZM10 11h2v1h-2ZM4 12h8v1h-8ZM5 13h6v1h-6Z" fill="#f5f0e4"/>
+      <path d="M2 1h1v1h-1ZM13 1h1v1h-1ZM2 2h2v1h-2ZM12 2h2v1h-2Z" fill="#e8a0a0"/>
+      <path d="M7 9h2v1h-2ZM7 10h2v1h-2ZM7 11h2v1h-2Z" fill="#c04357"/>
+      <path d="M6 10h1v1h-1ZM9 10h1v1h-1ZM6 11h1v1h-1ZM9 11h1v1h-1Z" fill="#f2b8c0"/>
+      <g class="cate-eyes"><path d="M4 6h2v1h-2ZM10 6h2v1h-2ZM4 7h1v1h-1ZM11 7h1v1h-1Z" fill="#3fa46a"/><path d="M5 7h1v1h-1ZM10 7h1v1h-1Z" fill="#0e2a1c"/></g>
+      <g class="cate-shut"><path d="M4 6h2v1h-2ZM10 6h2v1h-2Z" fill="#0e2a1c"/></g>
+      <text class="cate-zzz" x="14.2" y="5" font-size="2.6" fill="#8fd0a4" font-family="monospace">z</text>
+    </svg>
   <div id="health" aria-live="polite">Health: …</div>
+  <button id="theme-toggle" title="Theme wechseln (Dark/Light)" aria-label="Theme wechseln">🌙 Dark</button></div>
   <nav class="tabs" role="tablist" aria-label="Ansichten">
     <button role="tab" aria-selected="true" aria-controls="view-review" data-view="review" id="tab-review">Review</button>
     <button role="tab" aria-selected="false" aria-controls="view-editor" data-view="editor" id="tab-editor" tabindex="-1">Editor</button>
@@ -162,17 +265,28 @@
 <main>
   <section id="view-review" class="view active" role="tabpanel" aria-labelledby="tab-review" tabindex="0">
   <div class="opbar" role="toolbar" aria-label="Filter und Treffer">
-    <label>Level <select id="f-level"><option value="">alle</option><option>E3</option><option>E2</option><option>E1</option><option>E4</option><option>E0</option></select></label>
-    <label>Kategorie <select id="f-cat"><option value="">alle</option><option>crypto</option><option>auth</option><option>deserialization</option><option>injection</option><option>other</option></select></label>
-    <label><input type="checkbox" id="f-hide-e0"> E0 ausblenden</label>
+    <div class="fgroup" role="group" aria-label="Level filtern" id="fp-level"><span class="flabel">Level</span></div>
+    <div class="fgroup" role="group" aria-label="Kategorie filtern" id="fp-cat"><span class="flabel">Kategorie</span></div>
+    <div class="fgroup" role="group" aria-label="Anzeige"><button class="fpill" id="fp-hide-e0" aria-pressed="false" title="E0-Befunde ausblenden (umschalten)">E0 aus</button></div>
+    <label class="visually-hidden">Level <select id="f-level" tabindex="-1" aria-hidden="true"><option value="">alle</option><option>E3</option><option>E2</option><option>E1</option><option>E4</option><option>E0</option></select></label>
+    <label class="visually-hidden">Kategorie <select id="f-cat" tabindex="-1" aria-hidden="true"><option value="">alle</option><option>crypto</option><option>auth</option><option>deserialization</option><option>injection</option><option>other</option></select></label>
+    <label class="visually-hidden"><input type="checkbox" id="f-hide-e0" tabindex="-1" aria-hidden="true"> E0 ausblenden</label>
     <label>Erster AI-Scan <select id="m-first" aria-label="Erster AI-Scan"><option value="off">Aus</option><option value="ollama">Ollama</option><option value="gemini">Gemini</option></select></label>
     <label>Zweiter/Deep-Scan <select id="m-deep" aria-label="Zweiter Deep-Scan"><option value="off">Aus</option><option value="opencode">OpenCode</option><option value="claude">Claude</option></select></label>
-    <button id="rescan" title="Scan neu anstossen (Tauri rescan/scan bzw. Daten neu laden)">↻ Rescan</button>
+    <button id="rescan" class="btn-primary" title="Scan neu anstossen (Tauri rescan/scan bzw. Daten neu laden)">↻ Rescan</button>
     <span id="rescan-status" role="status" aria-live="polite"></span>
     <span id="count" aria-live="polite"></span>
   </div>
   <div id="list"></div>
   <div id="empty" class="empty-state" role="status">
+    <svg class="cate-empty cate-pix cate-blink" width="56" height="56" viewBox="0 0 16 16" shape-rendering="crispEdges" role="img" aria-label="Katze (blinzelt)">
+      <path d="M1 0h2v1h-2ZM13 0h2v1h-2ZM1 1h1v1h-1ZM3 1h1v1h-1ZM12 1h1v1h-1ZM14 1h1v1h-1ZM1 2h1v1h-1ZM4 2h8v1h-8ZM14 2h1v1h-1ZM2 3h1v1h-1ZM13 3h1v1h-1ZM2 4h1v1h-1ZM13 4h1v1h-1ZM2 5h1v1h-1ZM13 5h1v1h-1ZM2 6h1v1h-1ZM13 6h1v1h-1ZM2 7h1v1h-1ZM13 7h1v1h-1ZM2 8h1v1h-1ZM13 8h1v1h-1ZM2 9h1v1h-1ZM13 9h1v1h-1ZM2 10h1v1h-1ZM13 10h1v1h-1ZM3 11h1v1h-1ZM12 11h1v1h-1ZM3 12h1v1h-1ZM12 12h1v1h-1ZM4 13h1v1h-1ZM11 13h1v1h-1ZM4 14h8v1h-8Z" fill="#232329"/>
+      <path d="M3 3h10v1h-10ZM3 4h10v1h-10ZM3 5h10v1h-10ZM3 6h1v1h-1ZM6 6h4v1h-4ZM12 6h1v1h-1ZM3 7h1v1h-1ZM6 7h4v1h-4ZM12 7h1v1h-1ZM3 8h10v1h-10ZM3 9h4v1h-4ZM9 9h4v1h-4ZM3 10h3v1h-3ZM10 10h3v1h-3ZM4 11h2v1h-2ZM10 11h2v1h-2ZM4 12h8v1h-8ZM5 13h6v1h-6Z" fill="#f5f0e4"/>
+      <path d="M2 1h1v1h-1ZM13 1h1v1h-1ZM2 2h2v1h-2ZM12 2h2v1h-2Z" fill="#e8a0a0"/>
+      <path d="M7 9h2v1h-2ZM7 10h2v1h-2ZM7 11h2v1h-2Z" fill="#c04357"/>
+      <path d="M6 10h1v1h-1ZM9 10h1v1h-1ZM6 11h1v1h-1ZM9 11h1v1h-1Z" fill="#f2b8c0"/>
+      <g class="cate-eyes"><path d="M4 6h2v1h-2ZM10 6h2v1h-2ZM4 7h1v1h-1ZM11 7h1v1h-1Z" fill="#3fa46a"/><path d="M5 7h1v1h-1ZM10 7h1v1h-1Z" fill="#0e2a1c"/></g>
+    </svg>
     <b>Keine Befunde für diesen Filter</b>
     <p id="empty-detail">Passe Level oder Kategorie an — oder setze den Filter zurück.</p>
     <button id="empty-reset">Filter zurücksetzen</button>
@@ -209,7 +323,7 @@
       <div class="g-controls" role="toolbar" aria-label="Graph-Zoom">
         <button id="g-zoom-out" aria-label="Verkleinern">− Zoom</button>
         <button id="g-zoom-in" aria-label="Vergrössern">+ Zoom</button>
-        <button id="g-zoom-reset">Reset</button>
+        <button id="g-zoom-reset" class="btn-primary">Reset</button>
         <span class="g-meta" id="g-zoom-label" aria-live="polite"></span>
       </div>
       <p class="g-meta" id="g-meta" aria-live="polite">Modulgraph wird geladen …</p>
@@ -243,11 +357,38 @@
         <b>Audit-Log ist leer</b>
         <p>Jede Aktion (Übernehmen, Ablehnen, Automatik) wird hier protokolliert.</p>
       </div>
-      <button id="audit-clear">Log leeren</button>
+      <button id="audit-clear" class="btn-primary">Log leeren</button>
     </div>
   </section>
 </main>
+<!-- Sprint 2: Command-Palette (zentriert, Suchzeile mit Akzent-Unterstrich, Keyboard-Select als Voll-Fill) -->
+<div id="palette-backdrop" hidden>
+  <div id="palette" role="dialog" aria-modal="true" aria-label="Command-Palette">
+    <input id="palette-input" type="text" placeholder="Aktion suchen … (Rescan, Ansicht, Filter)" aria-label="Aktion suchen" role="combobox" aria-expanded="true" aria-controls="palette-list" aria-activedescendant="" autocomplete="off">
+    <ul id="palette-list" role="listbox" aria-label="Aktionen"></ul>
+    <div id="palette-empty" hidden>Keine Treffer.</div>
+    <div id="palette-hint" aria-hidden="true">↑↓ wählen · Enter ausführen · Esc schließen</div>
+  </div>
+</div>
 <script>
+// Theme: nous-Dark (Default) / daylight-Light, persistent in localStorage.
+const THEMES = ['nous', 'daylight'];
+function getTheme() {
+  try {
+    const t = localStorage.getItem('catehunt-theme');
+    if (THEMES.includes(t)) return t;
+  } catch (e) {}
+  return 'nous';
+}
+function applyTheme(t) {
+  document.documentElement.dataset.theme = t;
+  const b = document.getElementById('theme-toggle');
+  if (b) b.textContent = t === 'nous' ? '☀️ Light' : '🌙 Dark';
+  try { localStorage.setItem('catehunt-theme', t); } catch (e) {}
+}
+function toggleTheme() { applyTheme(getTheme() === 'nous' ? 'daylight' : 'nous'); }
+applyTheme(getTheme());
+document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
 const ORDER = { E3: 0, E2: 1, E1: 2, E4: 3, E0: 4 }; // E3 rot oben, E4 grün, E0 grau eingeklappt
 const COLORS = { E3: '#c81e1e', E2: '#d96c00', E1: '#8a6d00', E4: '#1e7e34', E0: '#6e6e6e' };
 let findings = [], health = null, modgraph = { nodes: [], edges: [] }, graphSrc = '', gShown = [], gSel = null;
@@ -375,7 +516,16 @@ function renderHealth() {
   const c = healthColor(v);
   document.getElementById('health').innerHTML =
     'Health: <b style="color:' + c + '">' + v + '</b>/100 <span class="pill" style="background:' + c + '">' +
-    healthLabel(v) + '</span> <span style="color:#bbb">· E2+-Bugs: <b>' + bugs + '</b></span>';
+    '<span class="pdot" aria-hidden="true"></span>' + healthLabel(v) + '</span> <span style="color:#bbb">· E2+-Bugs: <b>' + bugs + '</b></span>';
+ const comp = document.getElementById('health-cat');
+ if (comp) {
+ const hasE3 = findings.some(x => x && x.evidence === 'E3');
+ comp.classList.toggle('is-alert', hasE3 && v !== 100);
+ comp.classList.toggle('is-sleep', v === 100);
+ comp.setAttribute('aria-label', v === 100 ? 'Begleiter schläft (Health 100 von 100)'
+   : (hasE3 ? 'Begleiter warnt mit wedelndem Schwanz (E3-Befunde vorhanden)'
+            : 'Begleiter (Health ' + v + ' von 100)'));
+ }
 }
 function provOf(x) { const p = String(x.provenance || x.provenienz || '').trim(); return p || 'regel'; }
 function render() {
@@ -400,11 +550,11 @@ function render() {
     el.dataset.id = x.id;
     const deny = !!x.deny;
     el.innerHTML =
-      '<div class="title"><span class="badge">' + x.evidence + '</span> <b>' + esc(x.id) + '</b>' +
-      ' <span class="rule">' + esc(x.rule_id) + '</span> <span class="cwe">' + esc(x.cwe) + '</span>' +
-      ' <span class="prov" title="Provenienz: was hat erkannt (Regel-Engine, Modellname oder Triage-Stufe)">⛨ ' + esc(provOf(x)) + '</span>' +
+      '<div class="title"><span class="badge">' + x.evidence + '</span> <b title="' + esc(x.id) + ' — ' + esc(x.message) + '">' + esc(x.id) + '</b>' +
+      ' <span class="rule" title="' + esc(x.rule_id) + '">' + esc(x.rule_id) + '</span> <span class="cwe" title="' + esc(x.cwe) + '">' + esc(x.cwe) + '</span>' +
+      ' <span class="prov" title="Provenienz: was hat erkannt (Regel-Engine, Modellname oder Triage-Stufe) — ' + esc(provOf(x)) + '">⛨ ' + esc(provOf(x)) + '</span>' +
       (deny ? '<span class="deny-note">Deny-List</span>' : '') + '</div>' +
-      '<div class="meta">' + esc(x.file) + ':' + (x.start_line || '?') + ' · ' + esc(x.category) + ' · Provenienz: ' + esc(provOf(x)) + '</div>' +
+      '<div class="meta" title="' + esc(x.file) + ':' + (x.start_line || '?') + '">' + esc(x.file) + ':' + (x.start_line || '?') + ' · ' + esc(x.category) + ' · Provenienz: ' + esc(provOf(x)) + '</div>' +
       '<div class="details"><p class="msg">' + esc(x.message) + '</p>' +
       '<div class="actions">' +
         '<button data-act="confirm">Bestätigen</button>' +
@@ -660,6 +810,7 @@ function renderEditor() {
         : '');
     box.appendChild(el);
   }
+  paintPrimaries();
 }
 function renderSettings() {
   document.getElementById('set-auto').checked = settings.auto;
@@ -687,6 +838,9 @@ function selectTab(b, focus) {
   document.querySelectorAll('.view').forEach(v => { v.classList.remove('active'); v.hidden = true; });
   const p = document.getElementById('view-' + b.dataset.view);
   p.classList.add('active'); p.hidden = false;
+  const crumb = document.getElementById('crumb-view');
+  if (crumb) crumb.textContent = b.textContent.trim();
+  paintPrimaries();
 }
 tabBtns.forEach((b, i) => {
   b.addEventListener('click', () => selectTab(b, false));
@@ -697,13 +851,66 @@ tabBtns.forEach((b, i) => {
     }
   });
 });
-document.getElementById('f-level').addEventListener('change', render);
-document.getElementById('f-cat').addEventListener('change', render);
-document.getElementById('f-hide-e0').addEventListener('change', render);
+document.getElementById('f-level').addEventListener('change', () => { syncFilterPills(); render(); });
+document.getElementById('f-cat').addEventListener('change', () => { syncFilterPills(); render(); });
+document.getElementById('f-hide-e0').addEventListener('change', () => { syncFilterPills(); render(); });
+// ---- Sprint 2: Filter-Pills (live + tastaturbedienbar, spiegeln #f-level/#f-cat/#f-hide-e0) ----
+const FP_LEVELS = ['', 'E3', 'E2', 'E1', 'E4', 'E0'];
+const FP_CATS = ['', 'crypto', 'auth', 'deserialization', 'injection', 'other'];
+function buildPills(groupId, values, get, set, labels) {
+  const g = document.getElementById(groupId);
+  if (!g) return;
+  g.querySelectorAll('button.fpill').forEach(b => b.remove());
+  values.forEach(v => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'fpill';
+    b.dataset.val = v; b.setAttribute('aria-pressed', get() === v ? 'true' : 'false');
+    b.textContent = (labels && labels[v]) || v || 'alle';
+    b.title = 'Filter: ' + b.textContent;
+    b.addEventListener('click', () => { set(v); });
+    g.appendChild(b);
+  });
+  if (!g.dataset.roving) {
+    g.dataset.roving = '1';
+    g.addEventListener('keydown', e => {
+      if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+      const pills = Array.from(g.querySelectorAll('button.fpill'));
+      const i = pills.indexOf(document.activeElement);
+      if (i < 0) return;
+      e.preventDefault();
+      const n = pills[(i + (e.key === 'ArrowRight' ? 1 : pills.length - 1)) % pills.length];
+      n.focus(); n.click();
+    });
+  }
+}
+function syncFilterPills() {
+  const lv = document.getElementById('f-level'), cat = document.getElementById('f-cat'), hide = document.getElementById('f-hide-e0');
+  const setP = (id, val) => document.querySelectorAll('#' + id + ' button.fpill').forEach(b => b.setAttribute('aria-pressed', b.dataset.val === val ? 'true' : 'false'));
+  setP('fp-level', lv.value); setP('fp-cat', cat.value);
+  const hb = document.getElementById('fp-hide-e0');
+  if (hb) hb.setAttribute('aria-pressed', hide.checked ? 'true' : 'false');
+}
+function initFilterPills() {
+  const lv = document.getElementById('f-level'), cat = document.getElementById('f-cat'), hide = document.getElementById('f-hide-e0');
+  buildPills('fp-level', FP_LEVELS, () => lv.value, v => { lv.value = v; syncFilterPills(); render(); });
+  buildPills('fp-cat', FP_CATS, () => cat.value, v => { cat.value = v; syncFilterPills(); render(); }, { '': 'alle' });
+  const hb = document.getElementById('fp-hide-e0');
+  if (hb) hb.addEventListener('click', () => { hide.checked = !hide.checked; syncFilterPills(); render(); });
+  syncFilterPills();
+}
+// ---- Sprint 2: genau eine Primary pro View (Pfirsich #E8A15E, Rest Ghost) ----
+function paintPrimaries() {
+  // Review: #rescan · Graph: #g-zoom-reset · Einstellungen: #audit-clear (statisch im Markup).
+  // Editor: erster offener, nicht-blockierter Übernehmen-Button.
+  document.querySelectorAll('#suggestions [data-ed="apply"]').forEach(b => b.classList.remove('btn-primary'));
+  const first = document.querySelector('#suggestions [data-ed="apply"]:not(:disabled)');
+  if (first) first.classList.add('btn-primary');
+}
 document.getElementById('empty-reset').addEventListener('click', () => {
   document.getElementById('f-level').value = '';
   document.getElementById('f-cat').value = '';
   document.getElementById('f-hide-e0').checked = false;
+  syncFilterPills();
   render();
 });
 document.getElementById('list').addEventListener('click', e => {
@@ -746,7 +953,77 @@ document.getElementById('approved-cats').addEventListener('change', e => {
   saveSettings();
   logAudit('KATEGORIE ' + c + ' ' + (e.target.checked ? 'GENEHMIGT' : 'ENTZOGEN'));
 });
+// ---- Sprint 2: Command-Palette (Aktionen wie Rescan; Voll-Fill-Keyboard-Select) ----
+const PALETTE_ACTIONS = [
+  { id: 'rescan', label: '↻ Rescan durchführen', hint: 'Scan', run: () => document.getElementById('rescan').click() },
+  { id: 'goto-review', label: 'Zu Ansicht: Review', hint: 'Ansicht', run: () => selectTab(document.getElementById('tab-review'), true) },
+  { id: 'goto-editor', label: 'Zu Ansicht: Editor', hint: 'Ansicht', run: () => selectTab(document.getElementById('tab-editor'), true) },
+  { id: 'goto-graph', label: 'Zu Ansicht: Graph', hint: 'Ansicht', run: () => selectTab(document.getElementById('tab-graph'), true) },
+  { id: 'goto-settings', label: 'Zu Ansicht: Einstellungen', hint: 'Ansicht', run: () => selectTab(document.getElementById('tab-settings'), true) },
+  { id: 'filter-reset', label: 'Filter zurücksetzen', hint: 'Filter', run: () => document.getElementById('empty-reset').click() },
+  { id: 'toggle-e0', label: 'E0 ausblenden umschalten', hint: 'Filter', run: () => document.getElementById('fp-hide-e0').click() },
+  { id: 'zoom-in', label: 'Graph: Vergrössern', hint: 'Graph', run: () => document.getElementById('g-zoom-in').click() },
+  { id: 'zoom-out', label: 'Graph: Verkleinern', hint: 'Graph', run: () => document.getElementById('g-zoom-out').click() },
+  { id: 'zoom-reset', label: 'Graph: Zoom zurücksetzen', hint: 'Graph', run: () => document.getElementById('g-zoom-reset').click() },
+  { id: 'audit-clear', label: 'Audit-Log leeren', hint: 'Log', run: () => document.getElementById('audit-clear').click() }
+];
+let palIdx = 0, palItems = [];
+function palFiltered() {
+  const q = document.getElementById('palette-input').value.trim().toLowerCase();
+  return PALETTE_ACTIONS.filter(a => !q || a.label.toLowerCase().includes(q) || a.hint.toLowerCase().includes(q));
+}
+function palRender() {
+  const ul = document.getElementById('palette-list');
+  palItems = palFiltered();
+  palIdx = Math.min(Math.max(0, palIdx), Math.max(0, palItems.length - 1));
+  if (!palItems.length) palIdx = -1; else if (palIdx < 0) palIdx = 0;
+  ul.innerHTML = '';
+  palItems.forEach((a, i) => {
+    const li = document.createElement('li');
+    li.id = 'pal-opt-' + i; li.setAttribute('role', 'option');
+    li.setAttribute('aria-selected', i === palIdx ? 'true' : 'false');
+    if (i === palIdx) li.classList.add('active');
+    li.innerHTML = '<span>' + esc(a.label) + '</span><span class="pk">' + esc(a.hint) + '</span>';
+    li.addEventListener('click', () => { palIdx = i; palRun(); });
+    li.addEventListener('mousemove', () => { if (palIdx !== i) { palIdx = i; palRender(); } });
+    ul.appendChild(li);
+  });
+  document.getElementById('palette-empty').hidden = palItems.length > 0;
+  document.getElementById('palette-input').setAttribute('aria-activedescendant', palIdx >= 0 ? 'pal-opt-' + palIdx : '');
+}
+function palOpen() {
+  document.getElementById('palette-backdrop').hidden = false;
+  const inp = document.getElementById('palette-input');
+  inp.value = ''; palIdx = 0; palRender();
+  inp.focus();
+}
+function palClose() { document.getElementById('palette-backdrop').hidden = true; }
+function palRun() {
+  const a = palItems[palIdx];
+  palClose();
+  if (a) a.run();
+}
+function initPalette() {
+  document.getElementById('palette-trigger').addEventListener('click', palOpen);
+  document.getElementById('palette-backdrop').addEventListener('click', e => {
+    if (e.target.id === 'palette-backdrop') palClose();
+  });
+  document.getElementById('palette-input').addEventListener('input', () => { palIdx = 0; palRender(); });
+  document.getElementById('palette-input').addEventListener('keydown', e => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); if (palItems.length) { palIdx = (palIdx + 1) % palItems.length; palRender(); } }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); if (palItems.length) { palIdx = (palIdx - 1 + palItems.length) % palItems.length; palRender(); } }
+    else if (e.key === 'Enter') { e.preventDefault(); palRun(); }
+    else if (e.key === 'Escape') { e.preventDefault(); palClose(); }
+  });
+  document.addEventListener('keydown', e => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); palOpen(); }
+    else if (e.key === 'Escape' && !document.getElementById('palette-backdrop').hidden) palClose();
+  });
+}
 document.getElementById('audit-clear').addEventListener('click', () => { audit = []; saveAudit(); renderAudit(); });
+initFilterPills();
+initPalette();
+paintPrimaries();
 syncModelSelects();
 load().catch(err => { document.getElementById('list').textContent = 'Fehler: ' + err; });
 </script>
