@@ -82,6 +82,15 @@
   #g-svg { overflow-x: auto; border: 1px solid var(--line); border-radius: 6px; background: #fbfbfa; }
   #g-svg svg { display: block; }
   #g-svg svg text { font-family: var(--font); }
+  #g-svg .g-node { cursor: pointer; }
+  #g-svg .g-node:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+  #g-svg .g-node[aria-current="true"] rect { stroke-width: 4; }
+  #g-detail { margin-top: 8px; }
+  #g-detail:empty { display: none; }
+  #g-detail .g-d { border: 1px solid var(--line); border-radius: 6px; background: #fff; padding: 8px 12px; font-size: 12.5px; }
+  #g-detail .g-d b.t { font-size: 13px; font-family: var(--mono); }
+  #g-detail .g-d .row { margin: 3px 0; color: var(--muted); }
+  #g-detail .g-d button.link { background: none; border: 0; padding: 0 2px; margin: 0; min-height: 0; min-width: 0; color: #0b5ed7; font-family: var(--mono); font-size: 12px; text-decoration: underline; cursor: pointer; }
   #g-adj { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 10px; }
   #g-adj caption { text-align: left; font-size: 12px; color: var(--muted); padding-bottom: 6px; }
   #g-adj th, #g-adj td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
@@ -182,9 +191,10 @@
     </div>
     <div class="card">
       <h2>Modulgraph (use-/mod-Abhängigkeiten)</h2>
-      <p class="hint">Knoten = Modul (Farbe nach Health-Regel), Kante = Abhängigkeit. Reine Übersicht, keine Aktionen.</p>
+      <p class="hint">Knoten = Modul (Farbe nach Health-Regel), Kante = Abhängigkeit. Knoten anklicken für Details.</p>
       <p class="g-meta" id="g-meta" aria-live="polite">Modulgraph wird geladen …</p>
       <div id="g-svg" role="img" aria-label="Modulgraph"></div>
+      <div id="g-detail" aria-live="polite"></div>
       <table id="g-adj"></table>
     </div>
   </section>
@@ -211,7 +221,7 @@
 <script>
 const ORDER = { E3: 0, E2: 1, E1: 2, E4: 3, E0: 4 }; // E3 rot oben, E4 gruen, E0 grau eingeklappt
 const COLORS = { E3: '#c81e1e', E2: '#d96c00', E1: '#8a6d00', E4: '#1e7e34', E0: '#6e6e6e' };
-let findings = [], health = null, modgraph = { nodes: [], edges: [] }, graphSrc = '';
+let findings = [], health = null, modgraph = { nodes: [], edges: [] }, graphSrc = '', gShown = [], gSel = null;
 const CATS = ['crypto', 'auth', 'deserialization', 'injection', 'other'];
 // Demo-Vorschlaege je Kategorie (Platzhalter bis Backend suggest_fix liefert).
 const FIX_DEMO = {
@@ -378,6 +388,10 @@ function renderGraph() {
   }
 }
 function gName(v) { return v > 85 ? 'grün' : (v >= 60 ? 'gelb' : 'rot'); }
+function gNormCol(c) { c = String(c || 'gelb').toLowerCase(); if (c === 'green' || c.indexOf('grü') === 0 || c === 'gruen') return 'grün'; if (c === 'red' || c === 'rot') return 'rot'; return 'gelb'; }
+function gColOf(n) { return (typeof n.health === 'number') ? gName(n.health) : gNormCol(n.color); }
+function gHex(col) { return col === 'grün' ? '#1e7e34' : (col === 'rot' ? '#c81e1e' : '#b98a00'); }
+function gTint(col) { return col === 'grün' ? '#e9f5ec' : (col === 'rot' ? '#fdecec' : '#fdf3d7'); }
 function renderModuleGraph() {
   const meta = document.getElementById('g-meta');
   const box = document.getElementById('g-svg');
@@ -390,6 +404,8 @@ function renderModuleGraph() {
   if (!nodes.length) {
     box.innerHTML = '<div class="g-empty">Kein Modulgraph verfügbar — keine Module gefunden.</div>';
     tab.innerHTML = '';
+    document.getElementById('g-detail').innerHTML = '';
+    gShown = []; gSel = null;
     return;
   }
   const ids = new Set(nodes.map(n => n.id));
@@ -434,26 +450,29 @@ function renderModuleGraph() {
     s += '<line x1="' + (a.x + BW) + '" y1="' + (a.y + BH / 2) + '" x2="' + (b.x - 3) + '" y2="' + (b.y + BH / 2) +
       '" stroke="#8a8a86" stroke-width="1.5" marker-end="url(#g-arr)"><title>' + esc(e.from) + ' → ' + esc(e.to) + '</title></line>';
   }
-  for (const n of shown) {
+  for (let gi = 0; gi < shown.length; gi++) {
+    const n = shown[gi];
     const p = pos.get(n.id);
-    const col = (typeof n.health === 'number') ? gName(n.health) : (n.color || 'gelb');
-    const hex = col === 'grün' ? '#1e7e34' : (col === 'gelb' ? '#b98a00' : '#c81e1e');
-    const tint = col === 'grün' ? TINT.green : (col === 'gelb' ? TINT.yellow : TINT.red);
+    const col = gColOf(n);
+    const hex = gHex(col);
+    const tint = gTint(col);
     const label = String(n.id).length > 26 ? String(n.id).slice(0, 25) + '…' : String(n.id);
-    s += '<g><title>' + esc(n.id) + ' · Health ' + esc(n.health ?? '–') + ' (' + col + ')</title>' +
+    s += '<g class="g-node" data-gi="' + gi + '" tabindex="0" role="button" aria-current="' + (gSel === n.id) + '" aria-label="Modul ' + esc(n.id) + ', Health ' + esc(n.health == null ? '–' : n.health) + ' (' + col + ')"><title>' + esc(n.id) + ' · Health ' + esc(n.health == null ? '–' : n.health) + ' (' + col + ')</title>' +
       '<rect x="' + p.x + '" y="' + p.y + '" width="' + BW + '" height="' + BH + '" rx="6" fill="' + tint + '" stroke="' + hex + '" stroke-width="2"></rect>' +
       '<text x="' + (p.x + 10) + '" y="' + (p.y + 19) + '" font-size="11.5" font-weight="700" fill="#1b1b1b">' + esc(label) + '</text>' +
       '<text x="' + (p.x + 10) + '" y="' + (p.y + 36) + '" font-size="11" fill="' + hex + '">Health ' + esc(n.health ?? '–') + ' · ' + col + '</text></g>';
   }
   s += '</svg>';
   box.innerHTML = s;
+  gShown = shown;
+  if (gSel && !shownSet.has(gSel)) { gSel = null; document.getElementById('g-detail').innerHTML = ''; }
   const adj = new Map(nodes.map(n => [n.id, []]));
   for (const e of edges) { if (adj.has(e.from) && ids.has(e.to)) adj.get(e.from).push(e.to); }
   let rows = '';
   for (const n of nodes.slice(0, 200)) {
     const deps = (adj.get(n.id) || []).slice().sort();
-    const col = (typeof n.health === 'number') ? gName(n.health) : (n.color || 'gelb');
-    const hex = col === 'grün' ? '#1e7e34' : (col === 'gelb' ? '#b98a00' : '#c81e1e');
+    const col = gColOf(n);
+    const hex = gHex(col);
     rows += '<tr><td><code>' + esc(n.id) + '</code><br><span style="color:var(--faint);font-size:11px">' + esc(n.path || '') + '</span></td>' +
       '<td class="num"><span class="dot" style="background:' + hex + '"></span>' + esc(n.health ?? '–') + ' (' + col + ')</td>' +
       '<td>' + (deps.length ? deps.map(d => '<code>' + esc(d) + '</code>').join(', ') : '<span style="color:var(--faint)">—</span>') + '</td></tr>';
@@ -461,6 +480,44 @@ function renderModuleGraph() {
   tab.innerHTML = '<caption>Adjazenzliste: pro Modul alle direkten Abhängigkeiten.</caption>' +
     '<thead><tr><th scope="col">Modul</th><th scope="col">Health</th><th scope="col">Hängt ab von</th></tr></thead><tbody>' + rows + '</tbody>';
 }
+function showGraphDetail(id) {
+  const det = document.getElementById('g-detail');
+  const n = (modgraph.nodes || []).find(x => x && x.id === id);
+  if (!n) { det.innerHTML = ''; gSel = null; return; }
+  gSel = id;
+  const col = gColOf(n);
+  const hex = gHex(col);
+  const out = ((modgraph.edges || []).filter(e => e && e.from === id && e.to !== id && (modgraph.nodes || []).some(m => m.id === e.to))).map(e => e.to).sort();
+  const inp = ((modgraph.edges || []).filter(e => e && e.to === id && e.from !== id && (modgraph.nodes || []).some(m => m.id === e.from))).map(e => e.from).sort();
+  const link = d => '<button class="link" data-goto="' + esc(d) + '">' + esc(d) + '</button>';
+  det.innerHTML = '<div class="g-d" role="status"><b class="t">' + esc(n.id) + '</b> ' +
+    '<span class="dot" style="background:' + hex + '"></span><span>Health ' + esc(n.health == null ? '–' : n.health) + ' (' + col + ')</span>' +
+    '<div class="row">Pfad: <code>' + esc(n.path || '–') + '</code></div>' +
+    '<div class="row">Hängt ab von (' + out.length + '): ' + (out.length ? out.map(link).join(', ') : '–') + '</div>' +
+    '<div class="row">Wird benutzt von (' + inp.length + '): ' + (inp.length ? inp.map(link).join(', ') : '–') + '</div></div>';
+  box_markSel();
+}
+function box_markSel() {
+  const box = document.getElementById('g-svg');
+  box.querySelectorAll('.g-node').forEach(g => {
+    const n = gShown[+g.getAttribute('data-gi')];
+    g.setAttribute('aria-current', n && gSel === n.id ? 'true' : 'false');
+  });
+}
+document.getElementById('g-svg').addEventListener('click', e => {
+  const g = e.target.closest('.g-node'); if (!g) return;
+  const n = gShown[+g.getAttribute('data-gi')]; if (n) showGraphDetail(n.id);
+});
+document.getElementById('g-svg').addEventListener('keydown', e => {
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  const g = e.target.closest('.g-node'); if (!g) return;
+  e.preventDefault();
+  const n = gShown[+g.getAttribute('data-gi')]; if (n) showGraphDetail(n.id);
+});
+document.getElementById('g-detail').addEventListener('click', e => {
+  const b = e.target.closest('[data-goto]'); if (!b) return;
+  showGraphDetail(b.getAttribute('data-goto'));
+});
 function renderEditor() {
   const box = document.getElementById('suggestions');
   box.innerHTML = '';

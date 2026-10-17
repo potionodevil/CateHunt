@@ -126,11 +126,34 @@ Messung: `cargo tarpaulin --workspace --exclude-files 'src-tauri/*'` (Linux-CI) 
 ### 4.2 CI-Jobs (Reihenfolge = Kaskade)
 1. `fmt + clippy -D warnings` — Stil/Hygiene.
 2. `cargo test` (alle Stufen-1-Unit-Tests) — FAILED = Code rot.
-3. `cargo test -p cate-triage` (Adapter-Mocks, E2-Cap, Cache) — FAILED = Modell-Integration rot.
+3. `cargo test -p cate-triage` (Adapter-Mocks, E2-Cap, Cache, Prompt-Freeze, Eskalations-Guard) — FAILED = Modell-Integration rot.
 4. Harness (Demo + Fail-Fixture + Korpus) — FAILED = Suppression > 1 % ODER Fail-Fixture liefert PASS (Gate defekt).
 5. Fuzz-Kurzmodus (60 s/Target) — FAILED = Crash/Hang.
-6. Coverage — FAILED = unter Ziel.
+6. Coverage — `ci/coverage_gate.ps1` (s. §4.4) — FAILED = unter Ziel.
 7. UI-Approval-E2E (nur bei UI-Änderungen ODER nightly) — FAILED = Apply ohne Zustimmung.
+
+### 4.4 Coverage-Gate (offline-fähig, Stand 2026-10-17)
+
+`ci/coverage_gate.ps1` / `ci/coverage_gate.sh` (Einstieg wie `ci/harness.ps1`):
+- **Pfad A** (tarpaulin vorhanden): `cargo tarpaulin --workspace --exclude-files 'src-tauri/*'`,
+  Gate `--fail-under 70`, Artefakt unter `target/coverage/`.
+- **Pfad B** (tarpaulin offline nicht verfügbar, z.B. Windows): Testzahl-Gate je Crate
+  (`cargo test -p <crate>`, Summe aller `test result`-Zeilen, 0 failed Pflicht):
+
+| Crate | min passed | gemessen 2026-10-17 |
+|---|---|---|
+| cate-core | 65 | 71 |
+| cate-cli | 20 | 22 |
+| cate-sarif | 14 | 15 |
+| cate-deps | 12 | 13 |
+| cate-triage | 100 | 110 |
+| cate-graph | 70 | 78 |
+| cate-stages | 19 | 21 |
+| cate-mcp | 45 | 49 |
+| cate-sandbox | 21 | 23 |
+
+Gesamt Workspace: **402 passed / 0 failed** (39 Test-Targets). Bei legitimer
+Testzahl-Reduktion: MIN im Script + diese Tabelle gemeinsam anpassen.
 
 ### 4.3 Was FAILED bedeutet
 - FAILED blockiert Merge (Branch Protection, kein Override ohne Security-Review).
@@ -147,9 +170,13 @@ Messung: `cargo tarpaulin --workspace --exclude-files 'src-tauri/*'` (Linux-CI) 
 - [ ] **P1 — Cache-Hit/Miss + Kosten-Cap ungetestet**: nur Serialisierungs-Roundtrip vorhanden. Hit/Miss-Matrix + Budget-Guard-Test anlegen.
 - [ ] **P1 — Korpus zu schmal**: nur 5 CWEs, keine Traversal/Injection-Fälle (CWE-22/78/94). Je 1 vuln/fixed-Paar + Manifest.
 - [ ] **P1 — `cate-stages` nicht im Workspace**: `crates/cate-stages/` existiert, fehlt aber in `[workspace].members` → wird von `cargo test --workspace` ignoriert. Eintragen + Tests schreiben.
-- [ ] **P2 — Prompt-Freeze-Hash fehlt**: Adapter-Prompts können still driften. Hash-Test pro Adapter.
-- [ ] **P2 — Eskalations-Loop-Guard ungetestet**: kein Test für max-Stufen/Timeout/Audit-Record-Immutability.
-- [ ] **P2 — Coverage-Gate fehlt**: kein tarpaulin/llvm-cov-Job, keine Schwellen. CI-Job + Badge.
-- [ ] **P2 — SARIF-Schema-Validierung fehlt**: nur 1 Test in `cate-sarif`. Negativfälle (fehlende Pflichtfelder) ergänzen.
+- [x] **P2 — Prompt-Freeze-Hash fehlt** → geschlossen 2026-10-17: `crates/cate-triage/tests/prompt_freeze.rs`
+  (FNV-1a-64 `6ce4901fa27c411c` je Adapter + PROMPT_VERSION=v1-Assert + Regel-Anker; Drift = rot).
+- [x] **P2 — Eskalations-Loop-Guard ungetestet** → geschlossen 2026-10-17: `crates/cate-triage/tests/escalation_guard.rs`
+  (Deep nur bei Opt-in+Deny+unsicher, Plan-Matrix ohne Opt-in/ohne CLI, offline 0 Modell-Calls).
+- [x] **P2 — Coverage-Gate fehlt** → geschlossen 2026-10-17: `ci/coverage_gate.ps1` + `.sh`
+  (tarpaulin-Pfad A, sonst Testzahl-Gate Pfad B; Doku §4.4).
+- [x] **P2 — SARIF-Schema-Validierung fehlt** → geschlossen 2026-10-17: `crates/cate-sarif/tests/sarif_negative.rs`
+  (9 Negativfälle: kaputt/leer/locations-los → saubere Fehler + unlocated).
 - [ ] **P3 — Rollback/Undo-Test fehlt**: Apply→Undo-Hash-Vergleich.
 - [ ] **P3 — Flaky-Quarantäne-Prozess fehlt**: Quarantäne-Datei + 7-Tage-Regel einführen.

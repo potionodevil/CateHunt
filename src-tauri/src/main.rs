@@ -211,6 +211,64 @@ fn fix_audit(
         .audit_log())
 }
 
+/// Fix-Root aufloesen: `root` (falls gesetzt) muss nach Kanonisierung ein
+/// existierendes Verzeichnis sein, sonst Err. Alle Datei-Pfade von
+/// `preview_fix`/`apply_fix_files` werden auf diesen Root gejailt.
+fn resolve_fix_root(root: Option<String>) -> Result<std::path::PathBuf, String> {
+    let raw = root.unwrap_or_else(|| ".".to_string());
+    let canon =
+        std::fs::canonicalize(&raw).map_err(|e| format!("fix root ungueltig ({raw}): {e}"))?;
+    if !canon.is_dir() {
+        return Err(format!(
+            "fix root ist kein Verzeichnis: {}",
+            canon.display()
+        ));
+    }
+    Ok(canon)
+}
+
+/// Diff-Vorschau echter Datei-Aenderungen (read-only, S4-Regel: vor Apply
+/// pflicht). Nur nach Approval; Pfade gejailt auf `root` (Default: CWD),
+/// Secrets im Diff redigiert. Merkt sich die Changes je Proposal.
+#[tauri::command]
+fn preview_fix(
+    state: tauri::State<Mutex<fixflow::FixStore>>,
+    proposal_id: String,
+    root: Option<String>,
+    changes: Vec<cate_graph::apply::FileChange>,
+) -> Result<Vec<cate_graph::apply::FileDiff>, String> {
+    let root = resolve_fix_root(root)?;
+    state
+        .lock()
+        .map_err(|e| format!("store poisoned: {e}"))?
+        .preview_files(&root, &proposal_id, &changes)
+}
+
+/// Echte Dateianwendung: schreibt die zuvor per `preview_fix` bestaetigten
+/// `changes` (exakter Match, sonst `PREVIEW_REQUIRED`). Nur nach Approval
+/// (`approved_by` Pflicht, Ablauf- + Deny-Gates wie `apply_fix`), mit
+/// `.orig`-Backup je geaenderter Datei und Rollback bei Fehlern.
+#[tauri::command]
+fn apply_fix_files(
+    state: tauri::State<Mutex<fixflow::FixStore>>,
+    proposal_id: String,
+    approved_by: String,
+    root: Option<String>,
+    changes: Vec<cate_graph::apply::FileChange>,
+) -> Result<serde_json::Value, String> {
+    let root = resolve_fix_root(root)?;
+    let (proposal, report) = state
+        .lock()
+        .map_err(|e| format!("store poisoned: {e}"))?
+        .apply_with_files(&root, &proposal_id, &approved_by, &changes)?;
+    serde_json::to_value(serde_json::json!({
+        "proposal": proposal,
+        "files_changed": report.files_changed,
+        "backups": report.backups,
+    }))
+    .map_err(|e| format!("json: {e}"))
+}
+
 fn main() {
     tauri::Builder::default()
         .manage(Mutex::new(fixflow::FixStore::default()))
@@ -221,6 +279,8 @@ fn main() {
             suggest_fix,
             approve_fix,
             apply_fix,
+            preview_fix,
+            apply_fix_files,
             fix_audit
         ])
         .run(tauri::generate_context!())

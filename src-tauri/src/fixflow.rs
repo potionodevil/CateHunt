@@ -21,6 +21,7 @@
 //! (`suggest_with_ttl`, `suggest_suppress`, `approve_reviewed`) bieten die
 //! Gate-Felder explizit an; `apply` fuellt einen fehlenden Reviewer aus
 //! `approved_by` nach, sodass jede angewandte Suppression einen Reviewer hat.
+use cate_graph::apply::{self, ApplyReport, FileChange, FileDiff};
 use cate_graph::proposal::{request_apply, AuditEntry, Proposal};
 use cate_triage::{verdict_cap, MaxAction};
 use serde::{Deserialize, Serialize};
@@ -75,6 +76,9 @@ pub struct FixStore {
     pending_ttl_secs: HashMap<String, u64>,
     /// Suppress-Vorschlaege: proposal_id -> CWE (fuer Deny-Re-Check bei apply).
     suppress_cwe: HashMap<String, String>,
+    /// Ablage der zuletzt previewten Datei-Aenderungen je Proposal
+    /// (S4-Regel: `apply_with_files` nur nach passender `preview_files`).
+    previews: HashMap<String, Vec<FileChange>>,
 }
 
 impl FixStore {
@@ -235,11 +239,94 @@ impl FixStore {
             .expect("proposal muss nach apply existieren"))
     }
 
+    /// Diff-Vorschau echter Datei-Aenderungen (read-only, S4-Regel).
+    /// Legt die previewten `changes` je Proposal ab; nur exakt diese
+    /// duerfen danach per `apply_with_files` geschrieben werden.
+    /// Pfade werden auf `root` gejailt, Secrets im Diff redigiert.
+    pub fn preview_files(
+        &mut self,
+        root: &std::path::Path,
+        proposal_id: &str,
+        changes: &[FileChange],
+    ) -> Result<Vec<FileDiff>, String> {
+        let p = self
+            .proposals
+            .get(proposal_id)
+            .ok_or_else(|| format!("unbekannte proposal_id: {proposal_id}"))?;
+        let diffs = apply::preview_apply_files(root, p, changes)?;
+        self.previews
+            .insert(proposal_id.to_string(), changes.to_vec());
+        Ok(diffs)
+    }
+
+    /// Echte Dateianwendung: schreibt `changes` nach `root` (Backup `.orig`,
+    /// Rollback bei Fehler, kein Teil-Apply). Gates wie `apply` (Approval,
+    /// Ablauf, Deny-Re-Check) plus S4-Preview-Gate (`PREVIEW_REQUIRED`,
+    /// wenn `changes` nicht exakt dem letzten `preview_files` entspricht).
+    /// Erfolg traegt Reviewer aus `approved_by` nach und audit-loggt.
+    pub fn apply_with_files(
+        &mut self,
+        root: &std::path::Path,
+        proposal_id: &str,
+        approved_by: &str,
+        changes: &[FileChange],
+    ) -> Result<(Proposal, ApplyReport), String> {
+        if approved_by.trim().is_empty() {
+            return Err(
+                "APPROVAL_REQUIRED: apply_fix braucht approved_by oder vorherige Genehmigung"
+                    .to_string(),
+            );
+        }
+        if let Some(cwe) = self.suppress_cwe.get(proposal_id) {
+            if is_suppress_blocked(cwe) {
+                return Err(format!(
+                    "DENY_SUPPRESS_BLOCKED: CWE {cwe} darf nie suppressen (nur eskalieren)"
+                ));
+            }
+        }
+        match self.approvals.get(proposal_id) {
+            Some(meta) if meta.expired(now_secs()) => {
+                return Err(format!(
+                    "APPROVAL_EXPIRED: Zustimmung zu {proposal_id} ist abgelaufen (expires_at {}), erneut anfordern",
+                    meta.expires_at
+                ));
+            }
+            _ => {}
+        }
+        match self.previews.get(proposal_id) {
+            Some(prev) if prev == changes => {}
+            _ => {
+                return Err(format!(
+                    "PREVIEW_REQUIRED: {proposal_id} erst per preview_fix vorschauen, dann exakt diese changes anwenden"
+                ));
+            }
+        }
+        let mut audit = std::mem::take(&mut self.audit);
+        let result = match self.proposals.get_mut(proposal_id) {
+            Some(p) => apply::apply_files(root, p, approved_by, changes, &mut audit),
+            None => Err(format!("unbekannte proposal_id: {proposal_id}")),
+        };
+        self.audit = audit;
+        let report = result?;
+        if let Some(meta) = self.approvals.get_mut(proposal_id) {
+            if meta.reviewer.trim().is_empty() {
+                meta.reviewer = approved_by.trim().to_string();
+            }
+        }
+        self.previews.remove(proposal_id);
+        Ok((
+            self.proposals
+                .get(proposal_id)
+                .cloned()
+                .expect("proposal muss nach apply existieren"),
+            report,
+        ))
+    }
+
     /// Ablaufdatum einer Zustimmung (Unix-Sekunden), falls genehmigt.
     pub fn expires_at_of(&self, proposal_id: &str) -> Option<u64> {
         self.approvals.get(proposal_id).map(|m| m.expires_at)
     }
-
     /// Zustimmungs-Metadatum (Reviewer + Zeitraum), falls genehmigt.
     pub fn approval_of(&self, proposal_id: &str) -> Option<ApprovalMeta> {
         self.approvals.get(proposal_id).cloned()
@@ -395,5 +482,103 @@ mod tests {
         s.approve_reviewed(&p.id, "sinnvoll", "bob").unwrap();
         let done = s.apply(&p.id, "bob").expect("apply muss klappen");
         assert_eq!(done.status, cate_graph::ProposalStatus::Applied);
+    }
+
+    fn tmp_root(name: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("cate_fixflow_{name}_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    fn file_change(path: &str, new_content: &str) -> FileChange {
+        FileChange {
+            path: path.to_string(),
+            new_content: new_content.to_string(),
+            expected_old: None,
+        }
+    }
+
+    #[test]
+    fn datei_apply_ohne_preview_ist_preview_required() {
+        let root = tmp_root("gate");
+        let (mut s, p) = suggested();
+        s.approve(&p.id, "begruendet ok").unwrap();
+        let err = s
+            .apply_with_files(&root, &p.id, "alice", &[file_change("a.txt", "neu")])
+            .unwrap_err();
+        assert!(err.contains("PREVIEW_REQUIRED"), "unerwartet: {err}");
+        assert!(!root.join("a.txt").exists());
+        assert!(s.audit_log().is_empty());
+    }
+
+    #[test]
+    fn datei_apply_ohne_approval_schreibt_nichts() {
+        let root = tmp_root("noapproval");
+        let (mut s, p) = suggested();
+        // Preview selbst verlangt Approval (read-only Gate).
+        let err = s
+            .preview_files(&root, &p.id, &[file_change("a.txt", "neu")])
+            .unwrap_err();
+        assert!(err.contains("APPROVAL_REQUIRED"), "unerwartet: {err}");
+        assert!(!root.join("a.txt").exists());
+    }
+
+    #[test]
+    fn preview_dann_datei_apply_mit_backup_audit_reviewer() {
+        let root = tmp_root("happy");
+        std::fs::write(root.join("a.txt"), "alt\n").unwrap();
+        let (mut s, p) = suggested();
+        s.approve(&p.id, "begruendet ok").unwrap();
+        let changes = vec![file_change("a.txt", "neu\n")];
+        let diffs = s.preview_files(&root, &p.id, &changes).unwrap();
+        assert_eq!(diffs.len(), 1);
+        assert!(diffs[0].diff.contains("+ neu"));
+        let (done, report) = s
+            .apply_with_files(&root, &p.id, "alice", &changes)
+            .expect("apply muss klappen");
+        assert_eq!(done.status, cate_graph::ProposalStatus::Applied);
+        assert_eq!(report.files_changed, vec!["a.txt".to_string()]);
+        assert_eq!(report.backups.len(), 1);
+        assert_eq!(
+            std::fs::read_to_string(root.join("a.txt")).unwrap(),
+            "neu\n"
+        );
+        let log = s.audit_log();
+        assert_eq!(log.len(), 1);
+        assert_eq!(log[0].actor, "alice");
+        assert_eq!(s.approval_of(&p.id).unwrap().reviewer, "alice");
+    }
+
+    #[test]
+    fn datei_apply_jail_reject_vor_write() {
+        let root = tmp_root("jail");
+        let (mut s, p) = suggested();
+        s.approve(&p.id, "begruendet ok").unwrap();
+        // Preview jailed bereits: Jail-Verstoss scheitert vor jedem Write.
+        let err = s
+            .preview_files(&root, &p.id, &[file_change("../escape.txt", "x")])
+            .unwrap_err();
+        assert!(err.contains("INVALID_PATH"), "unerwartet: {err}");
+        assert!(s.audit_log().is_empty());
+    }
+
+    #[test]
+    fn datei_apply_abgelaufen_blockt_trotz_preview() {
+        let root = tmp_root("expired");
+        std::fs::write(root.join("a.txt"), "alt\n").unwrap();
+        let (mut s, p) = suggested();
+        s.approve(&p.id, "begruendet ok").unwrap();
+        let changes = vec![file_change("a.txt", "neu\n")];
+        s.preview_files(&root, &p.id, &changes).unwrap();
+        s.force_expire(&p.id).unwrap();
+        let err = s
+            .apply_with_files(&root, &p.id, "alice", &changes)
+            .unwrap_err();
+        assert!(err.contains("APPROVAL_EXPIRED"), "unerwartet: {err}");
+        assert_eq!(
+            std::fs::read_to_string(root.join("a.txt")).unwrap(),
+            "alt\n"
+        );
+        assert!(s.audit_log().is_empty());
     }
 }

@@ -13,6 +13,9 @@ use std::path::Path;
 pub mod proposal;
 pub use proposal::{proposals_to_json, ApplyPreview, Proposal, ProposalStatus};
 
+pub mod apply;
+pub use apply::{apply_files, preview_apply_files, ApplyReport, FileChange, FileDiff};
+
 pub mod reach;
 pub use reach::{reachability_from_module_params, ReachKind, ReachParams, Reachable};
 pub mod severity;
